@@ -1,5 +1,6 @@
 ## Session Log
 
+- 2026-07-20: Added safe pre-Day-5 scaffolding from `AP_Plan.md` Section 6 without implementing DB models/migrations yet. Files touched: `docker-compose.yml`, `.env.example`, `backend/app/__init__.py`, `backend/app/db/__init__.py`, `backend/app/models/__init__.py`, `backend/app/schemas/__init__.py`, `backend/tests/__init__.py`, `PROGRESS.md`. Learned: creating only Day-5-safe structure keeps momentum while avoiding premature Alembic/model churn. Next: implement SQLAlchemy models and Alembic initialization in one focused Day 5 change set.
 - 2026-07-20: Completed Git workflow practice for repo initialization, first commit, remote setup, and feature branch -> PR -> merge cycle. Files touched: `.gitignore`, `PROGRESS.md`. Learned: the full Git loop is clearer when practiced on the real repo, and keeping `.gitignore` in place early avoids accidental local-environment commits. Next: return to Week 1 Day 5 database bootstrap work.
 - 2026-07-20: Audited and aligned `PROGRESS.md` with `AP_Plan.md` tracking requirements. Files touched: `PROGRESS.md`. Learned: Day-by-day checklist and milestone-state formatting must be explicit so session handoffs are reliable. Next: start Day 5 database bootstrap (Postgres + first models + first migration).
 - 2026-07-20: Implemented Day 4 API scaffold and verification. Files touched: `backend/main.py`, `backend/requirements.txt`, `PROGRESS.md`. Learned: local FastAPI setup works with corporate package proxy, and `/docs` plus `/health` are reachable as expected. Next: continue Week 1 contract work and define normalized schema/completeness rules.
@@ -10,7 +11,7 @@
 ## Current Focus
 
 - Week 1 execution for the address enrichment pipeline.
-- Day 4 complete; Git workflow practice completed; next implementation task is Day 5 database connection and schema bootstrap.
+- Day 4 complete; safe pre-Day-5 scaffolding added; next implementation task is Day 5 database connection and schema bootstrap.
 
 ## Next Actions
 
@@ -45,6 +46,10 @@
 | `AP_Plan.md` | updated/existing | Address-pipeline month plan and day-by-day source of truth. |
 | `PROGRESS.md` | initialized | Added the first session log and current focus. |
 | `.gitignore` | created | Ignores local Python environment files, caches, and coverage artifacts. |
+| `docker-compose.yml` | created | Local Postgres service scaffold for Day 5 development. |
+| `.env.example` | created | Example app and database environment variables for local setup. |
+| `backend/app/` | created | Package scaffolding with `db`, `models`, and `schemas` subpackages. |
+| `backend/tests/` | created | Test package scaffold for backend tests. |
 | `backend/main.py` | created | FastAPI app with `GET /health` endpoint. |
 | `backend/requirements.txt` | created | Day 4 runtime dependencies (`fastapi`, `uvicorn`). |
 
@@ -54,3 +59,4 @@
 - The monthly plan structure, tech stack, and professional workflow skills remain the same; only the app domain and daily tasks changed.
 - The data model uses stage-separated tables (`raw_input` -> `parse_result` -> `enrichment_result` -> `geocode_result`) to preserve lineage and retries.
 - Local Git practice should happen against the actual project repo so branching, remote sync, and merge flow are learned in the same environment as the codebase.
+- For Day 5 prep, add only neutral scaffolding first (compose/env/package layout), then implement models + Alembic together so the first migration reflects real metadata.

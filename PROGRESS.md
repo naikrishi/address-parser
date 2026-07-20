@@ -17,6 +17,7 @@
 2. Create SQLAlchemy models for `raw_input` and `parse_result`.
 3. Initialize Alembic and run the first migration.
 4. Confirm the normalized address schema and completeness criteria against model fields.
+5. Gain access to install postgres, wsl, nodejs
 
 ## Status at a Glance
 

@@ -1,0 +1,27 @@
+# Normalize text files in Git while keeping platform-friendly working trees.
+* text=auto
+
+# Keep source and config files LF for cross-platform consistency.
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.ini text eol=lf
+*.toml text eol=lf
+*.mako text eol=lf
+*.sql text eol=lf
+*.sh text eol=lf
+
+# Use CRLF for Windows command scripts.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Common binary formats should never be line-ending normalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.pdf binary
+*.zip binary

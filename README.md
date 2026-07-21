@@ -38,9 +38,9 @@ Week 1 is about defining the problem clearly before building anything:
 7. As an engineer, I want retry logic and confidence scoring built into the plan, so transient failures and low-quality parses are handled consistently.
 8. As an administrator, I want proxy and CA bundle handling documented, so the pipeline can run reliably in enterprise or AKS environments.
 
-## Out of Scope
+## Out of Scope (Week 1)
 
-The following are intentionally out of scope for the whole project unless the scope is later expanded explicitly:
+The following are intentionally out of scope for Week 1 implementation and will be revisited in later weeks based on AP_Plan milestones:
 
 - adding authentication, user management, or role-based access control
 - storing customer data beyond the pipeline inputs and outputs needed for testing

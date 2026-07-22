@@ -146,3 +146,86 @@ erDiagram
 ## Notes for Week 1
 
 The first week should produce a clear spec, not code. If the pipeline contract is ambiguous, resolve the ambiguity here before implementation starts.
+
+## Day 6 Endpoint Cheat Sheet
+
+Day 6 delivers the first real parsing API flow with persistence and validation:
+
+- `POST /parse`: accepts a raw address payload, writes to `raw_input` + `parse_result`, and returns the created parse record.
+- `GET /parse/{id}`: returns a single parse record by parse result ID.
+- `GET /inputs`: returns a paginated list of raw inputs with parse-result counts.
+
+### Local run steps
+
+From repository root:
+
+1. `docker compose up -d postgres`
+2. `cd backend`
+3. `..\.venv\Scripts\python.exe -m alembic upgrade head`
+4. `..\.venv\Scripts\python.exe -m uvicorn main:app --reload`
+5. Open Swagger UI: `http://127.0.0.1:8000/docs`
+
+### Example: POST /parse request
+
+```json
+{
+	"raw_address": "3400 W Plano Pkwy, Plano, TX 75075, USA",
+	"input_source": "swagger",
+	"country_hint": "US"
+}
+```
+
+### Example: POST /parse response shape
+
+```json
+{
+	"id": "uuid",
+	"raw_input_id": "uuid",
+	"parser_name": "stub",
+	"parsed_components": {
+		"street_line": "3400 W Plano Pkwy",
+		"city": "Plano",
+		"state": "TX",
+		"postal_code": "75075",
+		"country": "US"
+	},
+	"is_complete": true,
+	"confidence_score": 0.75,
+	"created_at": "timestamp",
+	"raw_input": {
+		"id": "uuid",
+		"raw_address": "3400 W Plano Pkwy, Plano, TX 75075, USA",
+		"input_source": "swagger",
+		"country_hint": "US",
+		"created_at": "timestamp"
+	}
+}
+```
+
+### Example: GET /inputs response shape
+
+```json
+{
+	"items": [
+		{
+			"id": "uuid",
+			"raw_address": "1600 Amphitheatre Parkway, Mountain View, CA 94043, USA",
+			"input_source": "swagger",
+			"country_hint": "US",
+			"created_at": "timestamp",
+			"parse_result_count": 1
+		}
+	],
+	"total": 1,
+	"limit": 50,
+	"offset": 0
+}
+```
+
+### Swagger verification checklist
+
+1. Submit 5 fake addresses via `POST /parse`.
+2. Save returned parse IDs and raw input IDs.
+3. Fetch each parse via `GET /parse/{id}` and confirm `200`.
+4. Call `GET /inputs` and verify inserted raw input IDs are present.
+5. Submit a blank `raw_address` and verify validation returns `422`.

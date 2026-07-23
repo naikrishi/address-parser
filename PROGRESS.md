@@ -1,5 +1,9 @@
 ## Session Log
 
+- 2026-07-23: Follow-up validation pass completed against a live Postgres instance. Confirmed `alembic upgrade head` applies cleanly and current revision is `5d6a6d3f9c12`. Ran `pytest tests/test_parse_endpoints.py -q` against the migrated database and fixed one query bug surfaced during the run: `max(UUID)` in PostgreSQL is invalid for latest-status aggregation. Replaced that logic with PostgreSQL-safe `DISTINCT ON` style selection ordered by `created_at`, then re-ran tests to green. Final state: `8 passed` in focused endpoint suite. Files touched: `backend/app/api/routers/parse.py`, `PROGRESS.md`. Learned: database-level validation is essential for aggregation logic because type/operator behavior can differ from assumptions made during pure code review. Next: optionally reduce warning noise by moving `datetime.utcnow` defaults to timezone-aware UTC and tracking upstream FastAPI/Python 3.14 deprecation warnings.
+
+- 2026-07-23: Completed Week 2 Day 8 implementation for relationships and richer queries, then aligned repository scaffolding to the target file/folder structure in `AP_Plan.md`. Added `enrichment_result` and `geocode_result` ORM models, new Alembic migration `5d6a6d3f9c12`, richer parse/input query shapes, expanded endpoint tests, `backend/app/main.py` as the canonical FastAPI entrypoint with a compatibility shim in `backend/main.py`, backend service/LLM/router placeholders, frontend scaffold files, backend container/packaging scaffolds, and a placeholder GitHub Actions workflow. Files touched: `backend/app/models/enrichment_result.py`, `backend/app/models/geocode_result.py`, `backend/app/models/parse_result.py`, `backend/app/models/raw_input.py`, `backend/app/models/__init__.py`, `backend/alembic/env.py`, `backend/alembic/versions/5d6a6d3f9c12_add_enrichment_and_geocode_results.py`, `backend/app/schemas/parse.py`, `backend/app/schemas/__init__.py`, `backend/app/api/routers/parse.py`, `backend/tests/test_parse_endpoints.py`, `backend/app/main.py`, `backend/main.py`, `backend/app/core/security.py`, `backend/app/api/routers/auth.py`, `backend/app/api/routers/enrich.py`, `backend/app/api/routers/geocode.py`, `backend/app/services/__init__.py`, `backend/app/services/parse.py`, `backend/app/services/enrich.py`, `backend/app/services/geocode.py`, `backend/app/llm/__init__.py`, `backend/app/llm/embeddings.py`, `backend/app/llm/summarize.py`, `backend/Dockerfile`, `backend/pyproject.toml`, `.github/workflows/ci.yml`, `frontend/Dockerfile`, `frontend/package.json`, `frontend/vite.config.ts`, `frontend/tailwind.config.js`, `frontend/src/main.tsx`, `frontend/src/App.tsx`, `frontend/src/api/index.ts`, `frontend/src/components/index.ts`, `frontend/src/pages/index.ts`, `frontend/src/hooks/index.ts`, `frontend/src/types/index.ts`, `README.md`, `PROGRESS.md`. Learned: the cleanest Day 8 shape is parse-centric detail plus separate parse-list and input-list query surfaces, and scaffolding the target repo layout early reduces later path churn. Next: finish trustworthy executable validation in the repo venv, then move to Day 7 seed/review work or begin real enrichment/geocode service extraction.
+
 - 2026-07-22: Completed Week 1 Day 6 end-to-end implementation and verification for first parsing endpoints. Added API router/dependency scaffolding, Pydantic schemas/validation, and endpoints `POST /parse`, `GET /parse/{id}`, `GET /inputs` with persistence to `raw_input` and `parse_result`. Added endpoint integration tests and executed both automated and live verification (5 fake address inserts plus read-back/list checks). Files touched: `backend/main.py`, `backend/requirements.txt`, `backend/app/db/session.py`, `backend/app/schemas/__init__.py`, `backend/app/schemas/parse.py`, `backend/app/api/__init__.py`, `backend/app/api/deps.py`, `backend/app/api/routers/__init__.py`, `backend/app/api/routers/parse.py`, `backend/tests/test_parse_endpoints.py`, `README.md`, `PROGRESS.md`. Learned: a Windows-stable sync SQLAlchemy session path is the most reliable baseline for current environment while preserving Day 6 endpoint contracts and testability. Next: move to Day 7 buffer/review work by seeding realistic data and documenting reflections from Week 1.
 - 2026-07-21: Added a repository `.gitattributes` with cross-platform line-ending defaults to prevent noisy LF/CRLF warnings and keep Python/config files normalized. Files touched: `.gitattributes`, `PROGRESS.md`. Learned: setting eol policy at repo level is the simplest way to keep Windows and non-Windows contributors in sync. Next: run `git add --renormalize .` and inspect `git status` before commit.
 - 2026-07-21: Reviewed implementation against `AP_Plan.md` and `README.md` requirements for architecture, format, and Day 5 scope. Kept Day 5 implementation intact and applied correctness fixes: UUID ORM field annotations were updated from `str` to Python `UUID` types, an unused import was removed from Alembic env config, and README out-of-scope wording was aligned to Week 1 (not the full month) to match AP plan sequencing. Files touched: `backend/app/models/raw_input.py`, `backend/app/models/parse_result.py`, `backend/alembic/env.py`, `README.md`, `PROGRESS.md`. Learned: keeping documentation scope synchronized with the phased plan prevents false constraints when later milestones intentionally add auth, deployment, and observability. Next: begin Day 6 endpoint implementation using the now-stable DB model + migration baseline.
@@ -14,24 +18,27 @@
 
 ## Current Focus
 
-- Week 1 execution for the address enrichment pipeline.
-- Day 6 complete; next task is Day 7 buffer/review with realistic seed data and reflection.
+- Week 2 query/model expansion for the address enrichment pipeline.
+- Day 8 implementation is in place; remaining immediate work is clean executable validation and deciding whether to proceed with Day 7 buffer/review catch-up or continue into real enrichment service implementation.
 
 ## Next Actions
 
-1. Execute Day 7 buffer/review: seed 10-15 realistic fake addresses (including malformed and international variants) and verify endpoint behavior.
-2. Add short Week 1 reflection notes on what worked, what was confusing, and what to improve before Week 2.
-3. Decide whether to keep the current parse stub completeness heuristic or refine it before Day 8 relationship/query expansion.
-4. Keep local runbook current (`docker compose up`, migration, uvicorn, pytest) for repeatable handoff.
-5. Prepare Day 8 implementation outline for adding `enrichment_result` and `geocode_result` models/joins.
+1. Seed 10-15 realistic fake addresses for the Day 7 buffer/review task and verify the richer Day 8 query surfaces against that data.
+2. Decide whether to extract parse/enrich/geocode business logic out of routers into `backend/app/services/` before adding real provider integrations.
+3. Replace scaffold-only frontend files with a real Week 2 React/Vite UI when that milestone starts.
+4. Replace placeholder CI and auth/enrich/geocode router modules with real implementations as those milestones begin.
+5. Optionally harden datetime handling to timezone-aware UTC defaults across ORM models to remove upcoming Python deprecation risk.
 
 ## Status at a Glance
 
-- Week 1: 🟡 in progress
-- Milestone 1 (Data Backbone): 🟡 on track
+- Week 1: 🟡 mostly complete, Day 7 buffer/review still open
+- Week 2: 🟡 in progress
+- Milestone 1 (Data Backbone): ✅ functionally achieved
+- Milestone 2 (It's Alive on Screen): ⚪ not started, scaffold only
 - Day 4 (API fundamentals): ✅ complete
 - Day 5 (DB connection + schema): ✅ complete
 - Day 6 (parse endpoints + persistence): ✅ complete
+- Day 8 (relationships + richer queries): ✅ implementation and focused validation complete
 
 ## Day-by-Day Checklist (Week 1)
 
@@ -42,6 +49,10 @@
 - [x] Day 5 — Postgres in Docker + SQLAlchemy models (`raw_input`, `parse_result`) + first Alembic migration. (Completed 2026-07-21 with migration `d23a9abb64c2` applied.)
 - [x] Day 6 — First parsing endpoints with persistence (`POST /parse`, `GET /parse/{id}`, `GET /inputs`). (Completed 2026-07-22 with persistence, validation, tests, and live 5-address verification.)
 - [ ] Day 7 — Buffer/review + realistic seed data and reflection notes.
+
+## Day-by-Day Checklist (Week 2)
+
+- [x] Day 8 — Relationships and richer queries. Added `enrichment_result` and `geocode_result`, joined parse detail reads, parse/input filtering, pagination, and test coverage. (Completed 2026-07-23; explicit terminal confirmation of test/migration exit codes still needs follow-up.)
 
 ## What Exists So Far
 
@@ -76,11 +87,28 @@
 | `backend/app/api/routers/parse.py` | created | Day 6 endpoints: `POST /parse`, `GET /parse/{id}`, `GET /inputs`. |
 | `backend/app/schemas/parse.py` | created | Day 6 request/response contracts with Pydantic validation. |
 | `backend/app/schemas/__init__.py` | updated | Exports Day 6 parse schemas for package-level imports. |
-| `backend/main.py` | updated | Registers parse router in FastAPI app. |
+| `backend/main.py` | updated | Compatibility shim that re-exports `app` from `backend/app/main.py`. |
 | `backend/app/db/session.py` | updated | Uses sync SQLAlchemy session path for Windows-stable runtime behavior. |
 | `backend/requirements.txt` | updated | Added Day 6 test/runtime support packages (`pytest`, `httpx`). |
 | `backend/tests/test_parse_endpoints.py` | created | Integration tests for create/read/list and validation/not-found behavior. |
 | `README.md` | updated | Added Day 6 endpoint cheat sheet with run and payload examples. |
+| `backend/app/main.py` | created | Canonical FastAPI entrypoint matching the target file/folder structure. |
+| `backend/app/models/enrichment_result.py` | created | ORM model for downstream enrichment attempts tied to `parse_result`. |
+| `backend/app/models/geocode_result.py` | created | ORM model for downstream geocode attempts tied to `parse_result` and optional enrichment lineage. |
+| `backend/alembic/versions/5d6a6d3f9c12_add_enrichment_and_geocode_results.py` | created | Adds `enrichment_result` and `geocode_result` tables plus indexes. |
+| `backend/app/api/routers/parse.py` | updated | Day 8 query surface adds nested detail reads, `GET /parses`, and richer `GET /inputs` filters. |
+| `backend/app/schemas/parse.py` | updated | Day 8 response/list schemas for downstream lineage and richer queries. |
+| `backend/tests/test_parse_endpoints.py` | updated | Added lineage and query-filter integration coverage. |
+| `backend/Dockerfile` | created | Backend container scaffold aligned with the plan's target structure. |
+| `backend/pyproject.toml` | created | Backend packaging and pytest scaffold aligned with target structure. |
+| `backend/app/core/security.py` | created | Placeholder auth utility module for later milestones. |
+| `backend/app/api/routers/auth.py` | created | Placeholder auth router matching planned structure. |
+| `backend/app/api/routers/enrich.py` | created | Placeholder enrich router matching planned structure. |
+| `backend/app/api/routers/geocode.py` | created | Placeholder geocode router matching planned structure. |
+| `backend/app/services/` | created | Placeholder service-layer package for future router extraction. |
+| `backend/app/llm/` | created | Placeholder LLM integration package for later milestones. |
+| `.github/workflows/ci.yml` | created | Placeholder CI workflow so repository layout matches the plan. |
+| `frontend/` | created | Frontend scaffold matching the target Week 2 structure. |
 
 ## Key Decisions Made
 
@@ -95,3 +123,6 @@
 - For Day 6, endpoint behavior is raw-address-in with deterministic server-side parse stub output; full libpostal integration is deferred to later milestones.
 - `GET /inputs` returns a paginated object (`items`, `total`, `limit`, `offset`) to align with expected Week 2 UI data-fetch patterns.
 - Use sync SQLAlchemy sessions in the current Windows environment to avoid async psycopg event-loop compatibility issues during local runs.
+- For Day 8, keep the detail route parse-centric (`GET /parse/{id}`) and use separate parse-list vs input-list query surfaces so list endpoints stay summary-oriented.
+- Store `geocode_result.parse_result_id` in addition to optional `enrichment_result_id` to keep downstream presence filtering simple and avoid unnecessary deep joins.
+- Match the AP plan's target folder structure with scaffold files now, while keeping later-milestone modules clearly marked as placeholders rather than implying implementation.

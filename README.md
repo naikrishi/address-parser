@@ -147,13 +147,14 @@ erDiagram
 
 The first week should produce a clear spec, not code. If the pipeline contract is ambiguous, resolve the ambiguity here before implementation starts.
 
-## Day 6 Endpoint Cheat Sheet
+## Current Backend Milestone
 
-Day 6 delivers the first real parsing API flow with persistence and validation:
+The backend now covers the Day 6 parsing flow plus the Day 8 relationship/query expansion:
 
 - `POST /parse`: accepts a raw address payload, writes to `raw_input` + `parse_result`, and returns the created parse record.
-- `GET /parse/{id}`: returns a single parse record by parse result ID.
-- `GET /inputs`: returns a paginated list of raw inputs with parse-result counts.
+- `GET /parse/{id}`: returns a parse record plus any related `enrichment_result` and `geocode_result` rows.
+- `GET /parses`: returns a paginated parse-result list with filters for parser name, completeness, confidence, and downstream-stage presence.
+- `GET /inputs`: returns a paginated raw-input list with summary counts plus filters for parse/enrichment/geocode presence.
 
 ### Local run steps
 
@@ -162,7 +163,7 @@ From repository root:
 1. `docker compose up -d postgres`
 2. `cd backend`
 3. `..\.venv\Scripts\python.exe -m alembic upgrade head`
-4. `..\.venv\Scripts\python.exe -m uvicorn main:app --reload`
+4. `..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload`
 5. Open Swagger UI: `http://127.0.0.1:8000/docs`
 
 ### Example: POST /parse request
@@ -202,6 +203,94 @@ From repository root:
 }
 ```
 
+### Example: GET /parse/{id} response shape
+
+```json
+{
+	"id": "uuid",
+	"raw_input_id": "uuid",
+	"parser_name": "stub",
+	"parsed_components": {
+		"street_line": "3400 W Plano Pkwy",
+		"city": "Plano",
+		"state": "TX",
+		"postal_code": "75075",
+		"country": "US"
+	},
+	"is_complete": true,
+	"confidence_score": 0.75,
+	"created_at": "timestamp",
+	"raw_input": {
+		"id": "uuid",
+		"raw_address": "3400 W Plano Pkwy, Plano, TX 75075, USA",
+		"input_source": "swagger",
+		"country_hint": "US",
+		"created_at": "timestamp"
+	},
+	"enrichment_results": [
+		{
+			"id": "uuid",
+			"parse_result_id": "uuid",
+			"provider_name": "llm-stub",
+			"status": "complete",
+			"enriched_components": {
+				"street_line": "3400 W Plano Pkwy",
+				"city": "Plano",
+				"state": "TX",
+				"postal_code": "75075"
+			},
+			"is_complete": true,
+			"confidence_score": 0.82,
+			"error_message": null,
+			"created_at": "timestamp"
+		}
+	],
+	"geocode_results": [
+		{
+			"id": "uuid",
+			"parse_result_id": "uuid",
+			"enrichment_result_id": "uuid",
+			"provider_name": "geocoder-stub",
+			"status": "matched",
+			"latitude": 32.985,
+			"longitude": -96.75,
+			"result_payload": {
+				"match_quality": "roof-top"
+			},
+			"error_message": null,
+			"created_at": "timestamp"
+		}
+	]
+}
+```
+
+### Example: GET /parses response shape
+
+```json
+{
+	"items": [
+		{
+			"id": "uuid",
+			"raw_input_id": "uuid",
+			"parser_name": "stub",
+			"is_complete": true,
+			"confidence_score": 0.75,
+			"created_at": "timestamp",
+			"raw_address": "3400 W Plano Pkwy, Plano, TX 75075, USA",
+			"input_source": "swagger",
+			"country_hint": "US",
+			"enrichment_result_count": 1,
+			"geocode_result_count": 1,
+			"latest_enrichment_status": "complete",
+			"latest_geocode_status": "matched"
+		}
+	],
+	"total": 1,
+	"limit": 50,
+	"offset": 0
+}
+```
+
 ### Example: GET /inputs response shape
 
 ```json
@@ -213,7 +302,11 @@ From repository root:
 			"input_source": "swagger",
 			"country_hint": "US",
 			"created_at": "timestamp",
-			"parse_result_count": 1
+			"parse_result_count": 1,
+			"enrichment_result_count": 1,
+			"geocode_result_count": 1,
+			"has_enrichment": true,
+			"has_geocode": true
 		}
 	],
 	"total": 1,
@@ -222,10 +315,33 @@ From repository root:
 }
 ```
 
-### Swagger verification checklist
+### Query examples
+
+1. `GET /parses?has_enrichment=true&has_geocode=true`
+2. `GET /parses?is_complete=true&min_confidence=0.7`
+3. `GET /inputs?input_source=swagger&has_enrichment=true`
+4. `GET /inputs?country_hint=US&has_parse_results=true`
+
+### Repository structure status
+
+The repository now includes the target-structure scaffolding from the plan:
+
+- backend runtime entrypoint at `backend/app/main.py`
+- compatibility shim at `backend/main.py`
+- service-layer package in `backend/app/services/`
+- later-milestone router placeholders in `backend/app/api/routers/`
+- LLM package scaffold in `backend/app/llm/`
+- backend packaging/container scaffolds in `backend/pyproject.toml` and `backend/Dockerfile`
+- frontend scaffold in `frontend/`
+- CI scaffold in `.github/workflows/ci.yml`
+
+These added files are scaffolds to match the planned layout; they do not imply later milestones are implemented yet.
+
+### Verification checklist
 
 1. Submit 5 fake addresses via `POST /parse`.
 2. Save returned parse IDs and raw input IDs.
-3. Fetch each parse via `GET /parse/{id}` and confirm `200`.
-4. Call `GET /inputs` and verify inserted raw input IDs are present.
-5. Submit a blank `raw_address` and verify validation returns `422`.
+3. Fetch each parse via `GET /parse/{id}` and confirm `200` plus downstream arrays.
+4. Call `GET /parses` with and without filters and confirm pagination and counts.
+5. Call `GET /inputs` and verify inserted raw input IDs plus summary counts are present.
+6. Submit a blank `raw_address` and verify validation returns `422`.

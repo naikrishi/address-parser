@@ -22,4 +22,5 @@ class RawInput(Base):
         "ParseResult",
         back_populates="raw_input",
         cascade="all, delete-orphan",
+        order_by="ParseResult.created_at",
     )

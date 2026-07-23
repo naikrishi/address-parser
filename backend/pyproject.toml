@@ -1,0 +1,8 @@
+[project]
+name = "address-enrichment-pipeline-backend"
+version = "0.1.0"
+description = "Backend for the address enrichment pipeline"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -7,7 +7,7 @@ from alembic import context
 
 from app.core.config import get_database_url
 from app.db.base import Base
-from app.models import ParseResult, RawInput
+from app.models import EnrichmentResult, GeocodeResult, ParseResult, RawInput
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -25,3 +25,15 @@ class ParseResult(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
     raw_input = relationship("RawInput", back_populates="parse_results")
+    enrichment_results = relationship(
+        "EnrichmentResult",
+        back_populates="parse_result",
+        cascade="all, delete-orphan",
+        order_by="EnrichmentResult.created_at",
+    )
+    geocode_results = relationship(
+        "GeocodeResult",
+        back_populates="parse_result",
+        cascade="all, delete-orphan",
+        order_by="GeocodeResult.created_at",
+    )

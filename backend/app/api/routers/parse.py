@@ -1,16 +1,20 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import and_, exists, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
+from app.models.enrichment_result import EnrichmentResult
+from app.models.geocode_result import GeocodeResult
 from app.models.parse_result import ParseResult
 from app.models.raw_input import RawInput
 from app.schemas.parse import (
     InputListItem,
     InputsListResponse,
+    ParseListItem,
+    ParseListResponse,
     ParseCreateRequest,
     ParseResultResponse,
 )
@@ -50,6 +54,93 @@ def _build_parse_stub(raw_address: str, country_hint: str | None) -> tuple[dict[
     return parsed_components, complete, confidence_score
 
 
+def _build_parse_summary_maps(db: Session, parse_ids: list[UUID]) -> dict[UUID, dict[str, int | str | None]]:
+    if not parse_ids:
+        return {}
+
+    enrichment_counts_rows = db.execute(
+        select(EnrichmentResult.parse_result_id, func.count(EnrichmentResult.id))
+        .where(EnrichmentResult.parse_result_id.in_(parse_ids))
+        .group_by(EnrichmentResult.parse_result_id)
+    ).all()
+    enrichment_counts = {row[0]: int(row[1]) for row in enrichment_counts_rows}
+
+    geocode_counts_rows = db.execute(
+        select(GeocodeResult.parse_result_id, func.count(GeocodeResult.id))
+        .where(GeocodeResult.parse_result_id.in_(parse_ids))
+        .group_by(GeocodeResult.parse_result_id)
+    ).all()
+    geocode_counts = {row[0]: int(row[1]) for row in geocode_counts_rows}
+
+    latest_enrichment_rows = db.execute(
+        select(EnrichmentResult.parse_result_id, EnrichmentResult.status)
+        .where(EnrichmentResult.parse_result_id.in_(parse_ids))
+        .order_by(EnrichmentResult.parse_result_id, EnrichmentResult.created_at.desc())
+        .distinct(EnrichmentResult.parse_result_id)
+    ).all()
+    latest_enrichment_status = {row[0]: row[1] for row in latest_enrichment_rows}
+
+    latest_geocode_rows = db.execute(
+        select(GeocodeResult.parse_result_id, GeocodeResult.status)
+        .where(GeocodeResult.parse_result_id.in_(parse_ids))
+        .order_by(GeocodeResult.parse_result_id, GeocodeResult.created_at.desc())
+        .distinct(GeocodeResult.parse_result_id)
+    ).all()
+    latest_geocode_status = {row[0]: row[1] for row in latest_geocode_rows}
+
+    return {
+        parse_id: {
+            "enrichment_count": enrichment_counts.get(parse_id, 0),
+            "geocode_count": geocode_counts.get(parse_id, 0),
+            "latest_enrichment_status": latest_enrichment_status.get(parse_id),
+            "latest_geocode_status": latest_geocode_status.get(parse_id),
+        }
+        for parse_id in parse_ids
+    }
+
+
+def _build_input_summary_maps(
+    db: Session,
+    raw_input_ids: list[UUID],
+) -> dict[UUID, dict[str, int | bool]]:
+    if not raw_input_ids:
+        return {}
+
+    parse_count_rows = db.execute(
+        select(ParseResult.raw_input_id, func.count(ParseResult.id))
+        .where(ParseResult.raw_input_id.in_(raw_input_ids))
+        .group_by(ParseResult.raw_input_id)
+    ).all()
+    parse_counts = {row[0]: int(row[1]) for row in parse_count_rows}
+
+    enrichment_count_rows = db.execute(
+        select(ParseResult.raw_input_id, func.count(EnrichmentResult.id))
+        .join(EnrichmentResult, EnrichmentResult.parse_result_id == ParseResult.id)
+        .where(ParseResult.raw_input_id.in_(raw_input_ids))
+        .group_by(ParseResult.raw_input_id)
+    ).all()
+    enrichment_counts = {row[0]: int(row[1]) for row in enrichment_count_rows}
+
+    geocode_count_rows = db.execute(
+        select(ParseResult.raw_input_id, func.count(GeocodeResult.id))
+        .join(GeocodeResult, GeocodeResult.parse_result_id == ParseResult.id)
+        .where(ParseResult.raw_input_id.in_(raw_input_ids))
+        .group_by(ParseResult.raw_input_id)
+    ).all()
+    geocode_counts = {row[0]: int(row[1]) for row in geocode_count_rows}
+
+    return {
+        raw_input_id: {
+            "parse_result_count": parse_counts.get(raw_input_id, 0),
+            "enrichment_result_count": enrichment_counts.get(raw_input_id, 0),
+            "geocode_result_count": geocode_counts.get(raw_input_id, 0),
+            "has_enrichment": enrichment_counts.get(raw_input_id, 0) > 0,
+            "has_geocode": geocode_counts.get(raw_input_id, 0) > 0,
+        }
+        for raw_input_id in raw_input_ids
+    }
+
+
 @router.post("/parse", response_model=ParseResultResponse, status_code=status.HTTP_201_CREATED)
 def create_parse(
     payload: ParseCreateRequest,
@@ -80,7 +171,11 @@ def create_parse(
 
     query = (
         select(ParseResult)
-        .options(selectinload(ParseResult.raw_input))
+        .options(
+            selectinload(ParseResult.raw_input),
+            selectinload(ParseResult.enrichment_results),
+            selectinload(ParseResult.geocode_results),
+        )
         .where(ParseResult.id == parse_result.id)
     )
     created_result = db.scalar(query)
@@ -94,7 +189,11 @@ def create_parse(
 def get_parse(parse_id: UUID, db: Session = Depends(get_db)) -> ParseResult:
     query = (
         select(ParseResult)
-        .options(selectinload(ParseResult.raw_input))
+        .options(
+            selectinload(ParseResult.raw_input),
+            selectinload(ParseResult.enrichment_results),
+            selectinload(ParseResult.geocode_results),
+        )
         .where(ParseResult.id == parse_id)
     )
     parse_result = db.scalar(query)
@@ -104,23 +203,126 @@ def get_parse(parse_id: UUID, db: Session = Depends(get_db)) -> ParseResult:
     return parse_result
 
 
+@router.get("/parses", response_model=ParseListResponse)
+def get_parses(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    parser_name: str | None = Query(default=None, min_length=1, max_length=100),
+    is_complete: bool | None = Query(default=None),
+    min_confidence: float | None = Query(default=None, ge=0.0, le=1.0),
+    max_confidence: float | None = Query(default=None, ge=0.0, le=1.0),
+    has_enrichment: bool | None = Query(default=None),
+    has_geocode: bool | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> ParseListResponse:
+    filters = []
+    if parser_name is not None:
+        filters.append(ParseResult.parser_name == parser_name.strip())
+    if is_complete is not None:
+        filters.append(ParseResult.is_complete == is_complete)
+    if min_confidence is not None:
+        filters.append(ParseResult.confidence_score >= min_confidence)
+    if max_confidence is not None:
+        filters.append(ParseResult.confidence_score <= max_confidence)
+    if has_enrichment is not None:
+        enrichment_exists = exists(select(1).where(EnrichmentResult.parse_result_id == ParseResult.id))
+        filters.append(enrichment_exists if has_enrichment else ~enrichment_exists)
+    if has_geocode is not None:
+        geocode_exists = exists(select(1).where(GeocodeResult.parse_result_id == ParseResult.id))
+        filters.append(geocode_exists if has_geocode else ~geocode_exists)
+
+    base_query = select(ParseResult).join(RawInput, ParseResult.raw_input_id == RawInput.id)
+    if filters:
+        base_query = base_query.where(and_(*filters))
+
+    total_query = select(func.count()).select_from(base_query.order_by(None).subquery())
+    total = db.scalar(total_query)
+    total_count = int(total or 0)
+
+    rows = db.scalars(
+        base_query.options(
+            selectinload(ParseResult.raw_input),
+        )
+        .order_by(ParseResult.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    ).all()
+
+    parse_summary_by_id = _build_parse_summary_maps(db, [row.id for row in rows])
+
+    items = [
+        ParseListItem(
+            id=row.id,
+            raw_input_id=row.raw_input_id,
+            parser_name=row.parser_name,
+            is_complete=row.is_complete,
+            confidence_score=row.confidence_score,
+            created_at=row.created_at,
+            raw_address=row.raw_input.raw_address,
+            input_source=row.raw_input.input_source,
+            country_hint=row.raw_input.country_hint,
+            enrichment_result_count=int(parse_summary_by_id.get(row.id, {}).get("enrichment_count", 0)),
+            geocode_result_count=int(parse_summary_by_id.get(row.id, {}).get("geocode_count", 0)),
+            latest_enrichment_status=parse_summary_by_id.get(row.id, {}).get("latest_enrichment_status"),
+            latest_geocode_status=parse_summary_by_id.get(row.id, {}).get("latest_geocode_status"),
+        )
+        for row in rows
+    ]
+
+    return ParseListResponse(items=items, total=total_count, limit=limit, offset=offset)
+
+
 @router.get("/inputs", response_model=InputsListResponse)
 def get_inputs(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    input_source: str | None = Query(default=None, min_length=1, max_length=100),
+    country_hint: str | None = Query(default=None, min_length=1, max_length=100),
+    has_parse_results: bool | None = Query(default=None),
+    has_enrichment: bool | None = Query(default=None),
+    has_geocode: bool | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> InputsListResponse:
-    total = db.scalar(select(func.count(RawInput.id)))
+    filters = []
+    if input_source is not None:
+        filters.append(RawInput.input_source == input_source.strip())
+    if country_hint is not None:
+        filters.append(RawInput.country_hint == country_hint.strip())
+    if has_parse_results is not None:
+        parse_exists = exists(select(1).where(ParseResult.raw_input_id == RawInput.id))
+        filters.append(parse_exists if has_parse_results else ~parse_exists)
+    if has_enrichment is not None:
+        enrichment_exists = exists(
+            select(1)
+            .select_from(ParseResult)
+            .join(EnrichmentResult, EnrichmentResult.parse_result_id == ParseResult.id)
+            .where(ParseResult.raw_input_id == RawInput.id)
+        )
+        filters.append(enrichment_exists if has_enrichment else ~enrichment_exists)
+    if has_geocode is not None:
+        geocode_exists = exists(
+            select(1)
+            .select_from(ParseResult)
+            .join(GeocodeResult, GeocodeResult.parse_result_id == ParseResult.id)
+            .where(ParseResult.raw_input_id == RawInput.id)
+        )
+        filters.append(geocode_exists if has_geocode else ~geocode_exists)
+
+    base_query = select(RawInput)
+    if filters:
+        base_query = base_query.where(and_(*filters))
+
+    total = db.scalar(select(func.count()).select_from(base_query.order_by(None).subquery()))
     total_count = int(total or 0)
 
-    query = (
-        select(RawInput)
-        .options(selectinload(RawInput.parse_results))
+    rows = db.scalars(
+        base_query
         .order_by(RawInput.created_at.desc())
         .limit(limit)
         .offset(offset)
-    )
-    rows = db.scalars(query).all()
+    ).all()
+
+    input_summary_by_id = _build_input_summary_maps(db, [row.id for row in rows])
 
     items = [
         InputListItem(
@@ -129,7 +331,11 @@ def get_inputs(
             input_source=row.input_source,
             country_hint=row.country_hint,
             created_at=row.created_at,
-            parse_result_count=len(row.parse_results),
+            parse_result_count=int(input_summary_by_id.get(row.id, {}).get("parse_result_count", 0)),
+            enrichment_result_count=int(input_summary_by_id.get(row.id, {}).get("enrichment_result_count", 0)),
+            geocode_result_count=int(input_summary_by_id.get(row.id, {}).get("geocode_result_count", 0)),
+            has_enrichment=bool(input_summary_by_id.get(row.id, {}).get("has_enrichment", False)),
+            has_geocode=bool(input_summary_by_id.get(row.id, {}).get("has_geocode", False)),
         )
         for row in rows
     ]

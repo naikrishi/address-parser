@@ -44,6 +44,35 @@ class RawInputSummary(BaseModel):
     created_at: datetime
 
 
+class EnrichmentResultResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    parse_result_id: UUID
+    provider_name: str
+    status: str
+    enriched_components: dict[str, str | None]
+    is_complete: bool
+    confidence_score: float | None
+    error_message: str | None
+    created_at: datetime
+
+
+class GeocodeResultResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    parse_result_id: UUID
+    enrichment_result_id: UUID | None
+    provider_name: str
+    status: str
+    latitude: float | None
+    longitude: float | None
+    result_payload: dict[str, str | float | int | bool | None]
+    error_message: str | None
+    created_at: datetime
+
+
 class ParseResultResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -55,6 +84,26 @@ class ParseResultResponse(BaseModel):
     confidence_score: float
     created_at: datetime
     raw_input: RawInputSummary
+    enrichment_results: list[EnrichmentResultResponse] = Field(default_factory=list)
+    geocode_results: list[GeocodeResultResponse] = Field(default_factory=list)
+
+
+class ParseListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    raw_input_id: UUID
+    parser_name: str
+    is_complete: bool
+    confidence_score: float
+    created_at: datetime
+    raw_address: str
+    input_source: str
+    country_hint: str | None
+    enrichment_result_count: int
+    geocode_result_count: int
+    latest_enrichment_status: str | None
+    latest_geocode_status: str | None
 
 
 class InputListItem(BaseModel):
@@ -66,6 +115,17 @@ class InputListItem(BaseModel):
     country_hint: str | None
     created_at: datetime
     parse_result_count: int
+    enrichment_result_count: int
+    geocode_result_count: int
+    has_enrichment: bool
+    has_geocode: bool
+
+
+class ParseListResponse(BaseModel):
+    items: list[ParseListItem]
+    total: int
+    limit: int
+    offset: int
 
 
 class InputsListResponse(BaseModel):

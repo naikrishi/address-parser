@@ -106,7 +106,14 @@ A truly *end-to-end* workflow needs more than the 7 above. I've completed your l
 | UI styling | **Tailwind CSS** | Learn styling fundamentals fast without fighting CSS files. |
 | Data fetching | **TanStack Query (React Query)** | Teaches client-side caching, loading/error states properly. |
 | Auth | **JWT (access + refresh tokens) via OAuth2 password flow** | The canonical token-based auth pattern; directly teaches skill #3. |
-| LLM / embeddings | **Your company's model API** (fallback: `sentence-transformers` local) | Real-world integration; local fallback keeps you unblocked and costs nothing. |
+| LLM — gap filling (Step 2) | **GPT-4o** (`gpt-4o`) via company proxy endpoint | Primary model for structured field extraction when libpostal is incomplete. |
+| LLM — web search (Step 3) | **gpt-4o-search-preview** (or `gpt-5-search-api` when available) via company proxy | Search-grounded model used only when Step 2 still leaves fields missing. |
+| LLM — embeddings | **Company embedding API** (fallback: `sentence-transformers` local, e.g. `all-MiniLM-L6-v2`) | Powers vector similarity for fuzzy address matching; local fallback costs nothing. |
+| Geocoding + nearby (Step 4 primary) | **gpt-4o-search-preview** LLM web search | Returns lat/lon + top-5 nearby businesses; preferred because it needs no extra API key. |
+| Geocoding + nearby (Step 4 fallback) | **Serper Maps API** (`api.serper.dev`) | Called only if the LLM geocode step fails; also used to backfill remaining address fields by regex-parsing the first returned business address. |
+| Retry / resilience | **tenacity** (Python library) | Exponential backoff on all external network calls (LLM, Serper). Prevents cascade failures on transient errors. |
+| Cost tracking | Token-count estimator in `services/` | Estimates cost per request using GPT-4 pricing (`input_tokens × rate + output_tokens × rate`). Stored with each enrichment record. |
+| Enterprise networking | Corporate proxy + custom CA bundle (env vars: `HTTPS_PROXY`, `SSL_CERT_FILE`) | Required for AKS / on-prem environments where outbound traffic routes through a corporate proxy. All `httpx`/`requests` calls must honour these. |
 | Containers | **Docker + Docker Compose** | Standard local-to-cloud bridge. |
 | CI/CD | **GitHub Actions** | Free, ubiquitous, great docs. |
 | Deployment | **Railway or Render** (beginner-friendly) → optionally **AWS/Azure** later | Get to a live URL fast; graduate to a hyperscaler once concepts click. |
@@ -150,10 +157,16 @@ A truly *end-to-end* workflow needs more than the 7 above. I've completed your l
 
 **Request flow example (address enrichment):**
 1. User submits a raw address → React calls `POST /enrich`.
-2. FastAPI runs libpostal to parse the string into structured pieces.
-3. If the parse is incomplete, FastAPI calls an LLM to fill gaps from the raw input and parse.
-4. If still incomplete, it escalates to a search-enabled LLM.
-5. FastAPI geocodes the address, fetches nearby businesses, and backfills missing fields from the first nearby business address when needed.
+2. FastAPI runs **libpostal** to parse the string into structured components (street, city, state, zip, country). If all key fields are present, the pipeline stops here (Step 1 exit).
+3. If any key field is missing, **GPT-4o** (`gpt-4o`) is called with the raw input + libpostal output to fill gaps and return merged structured JSON (Step 2).
+4. If fields are still missing after Step 2, **gpt-4o-search-preview** (search-grounded LLM) is called to find the remaining fields by searching the web (Step 3).
+5. Regardless of parse completeness, FastAPI geocodes the address: **gpt-4o-search-preview** is called first (primary) to retrieve lat/lon and top-5 nearby businesses. If that fails, the **Serper Maps API** is called as fallback. Any address fields still missing are then backfilled by regex-parsing the first Serper business address (e.g. extracting zip/state/city from `"3400 W Plano Pkwy, Plano, TX 75075"`) (Step 4).
+6. A **confidence score** (low / medium / high) is produced by a quick LLM call that judges the overall parse quality, and stored with the enrichment record.
+7. A **cost estimate** (USD) is computed from input + output token counts using GPT-4 pricing and stored with the enrichment record.
+8. All external calls (LLM, Serper) use **exponential backoff with retry** (via `tenacity`) to handle transient network failures gracefully.
+9. All outbound HTTP requests honour `HTTPS_PROXY` and `SSL_CERT_FILE` env vars for **corporate proxy + CA bundle** compatibility (AKS / on-prem environments).
+
+**`/compare` utility:** The `POST /compare` endpoint (backed by `compare_step_4_apis` in `services/`) benchmarks Serper vs. multiple OpenAI models for Step 4 side-by-side, returning latency, cost, and result quality for each. Used for diagnostics and model selection.
 
 ---
 
@@ -287,10 +300,10 @@ swe_learning/
   - *Task:* Add pgvector extension + an `embedding` column. Write `llm/embeddings.py` to turn a raw address + parse into a vector (company API, or local `sentence-transformers` fallback). Backfill embeddings for your seed data.
   - *Why:* This is your company's domain — the feature that makes the app special.
 
-- **Day 10 — LLM integration part 2: semantic search + summaries (skill #11).**
-  - *Concept:* nearest-neighbor search, RAG basics, prompt design.
-  - *Task:* Build `POST /enrich` (embed query → similarity + extraction → ranked candidates) and `GET /parse/{id}/summary` (LLM-generated summary of a parse and enrichment path). Test in Swagger.
-  - *Why:* Turns a static parser into an intelligent, queryable enrichment system.
+- **Day 10 — LLM integration part 2: full pipeline + summaries + confidence (skill #11).**
+  - *Concept:* nearest-neighbor search, RAG basics, prompt design, confidence scoring.
+  - *Task:* Wire the complete 4-step enrichment pipeline into `POST /enrich`: libpostal (Step 1) → GPT-4o gap fill (Step 2) → gpt-4o-search-preview web search (Step 3) → gpt-4o-search-preview geocode with Serper fallback + field backfill (Step 4). Add `GET /parse/{id}/summary` (LLM-generated summary of the enrichment path). Add a **confidence scoring** step: after enrichment completes, make a short LLM call that evaluates the result and returns `low`, `medium`, or `high`; store this alongside the enrichment record. Add a **cost estimator** that calculates USD cost from token counts (GPT-4 input/output pricing) and stores it per request. Wrap all external calls with `tenacity` exponential backoff. Test the full flow end-to-end in Swagger.
+  - *Why:* Delivers the complete intelligent pipeline — not just a static parser but a system that knows when it's confident and what it cost to produce an answer.
 
 - **Day 11 — Frontend setup + first screen (skill #4).**
   - *Concept:* SPA, components, JSX/TSX, Vite dev server, Tailwind.

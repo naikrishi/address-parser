@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import uuid4
 from uuid import UUID as UUIDType
 
-from sqlalchemy import DateTime, Float, ForeignKey, JSON, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,6 +28,9 @@ class GeocodeResult(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     result_payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    estimated_cost: Mapped[float | None] = mapped_column(Float, nullable=True)  # USD
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 

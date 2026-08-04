@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import uuid4
 from uuid import UUID as UUIDType
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,6 +23,11 @@ class EnrichmentResult(Base):
     enriched_components: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     is_complete: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence_label: Mapped[str | None] = mapped_column(String(10), nullable=True)  # low/medium/high
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    estimated_cost: Mapped[float | None] = mapped_column(Float, nullable=True)  # USD
+    llm_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 

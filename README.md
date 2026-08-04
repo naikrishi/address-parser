@@ -149,22 +149,58 @@ The first week should produce a clear spec, not code. If the pipeline contract i
 
 ## Current Backend Milestone
 
-The backend now covers the Day 6 parsing flow plus the Day 8 relationship/query expansion:
+The backend covers Days 6, 8, 9, and 10 — parsing through full LLM enrichment:
 
-- `POST /parse`: accepts a raw address payload, writes to `raw_input` + `parse_result`, and returns the created parse record.
-- `GET /parse/{id}`: returns a parse record plus any related `enrichment_result` and `geocode_result` rows.
-- `GET /parses`: returns a paginated parse-result list with filters for parser name, completeness, confidence, and downstream-stage presence.
-- `GET /inputs`: returns a paginated raw-input list with summary counts plus filters for parse/enrichment/geocode presence.
+**Parse endpoints (Day 6 + 8)**
+- `POST /parse` — write raw input + parse result, return full parse record.
+- `GET /parse/{id}` — parse record with related enrichment/geocode rows.
+- `GET /parse/{id}/summary` — LLM-generated (or rule-based) enrichment path summary.
+- `GET /parses` — paginated parse list with filters (parser, completeness, confidence, downstream presence).
+- `GET /inputs` — paginated raw-input list with per-input summary counts.
+
+**Enrichment endpoint (Day 10)**
+- `POST /enrich` — runs the full 4-step pipeline for a given `parse_result_id`:
+  - Step 1: libpostal parse (stub, replaceable when libpostal is available).
+  - Step 2: GPT-4o gap fill (stub when `OPENAI_API_KEY`/`OPENAI_API_BASE_URL` not set).
+  - Step 3: `gpt-4o-search-preview` web search fallback (stub when not configured).
+  - Step 4: geocode via `gpt-4o-search-preview` primary, Serper Maps API fallback (stub when not configured).
+  - Computes confidence label (`low`/`medium`/`high`) and USD cost estimate.
+  - Generates enrichment path summary and stores it with the enrichment record.
+
+**Embeddings (Day 9)**
+- `parse_result.embedding` column (vector(384), nullable) backed by pgvector.
+- `POST /enrich` auto-generates and stores an embedding for the parse record.
+- Backfill script: `python -m scripts.backfill_embeddings [--dry-run] [--force] [--batch-size N]`.
+- Provider: `sentence-transformers/all-MiniLM-L6-v2` (local, no API key needed).
+- Company API slot is wired and ready; set `EMBEDDINGS_PROVIDER=company_api` + credentials when available.
 
 ### Local run steps
 
 From repository root:
 
-1. `docker compose up -d postgres`
+1. `docker-compose up -d postgres`
 2. `cd backend`
-3. `..\.venv\Scripts\python.exe -m alembic upgrade head`
-4. `..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload`
+3. `..\.venv\Scripts\alembic.exe upgrade head`
+4. `..\.venv\Scripts\uvicorn.exe app.main:app --reload`
 5. Open Swagger UI: `http://127.0.0.1:8000/docs`
+
+**First-run note:** the sentence-transformers model (`all-MiniLM-L6-v2`, ~90 MB) is downloaded from HuggingFace on first embedding call. Subsequent runs use the local cache.
+
+### Environment variables
+
+Copy `.env.example` to `.env` and fill in:
+
+| Variable | Required for | Default |
+|---|---|---|
+| `DATABASE_URL` | All | local psycopg URL |
+| `EMBEDDINGS_PROVIDER` | Day 9 embeddings | `local` |
+| `EMBEDDINGS_MODEL` | Day 9 embeddings | `all-MiniLM-L6-v2` |
+| `EMBEDDINGS_DIMENSION` | Day 9 embeddings | `384` |
+| `OPENAI_API_BASE_URL` | Day 10 LLM steps | *(placeholder)* |
+| `OPENAI_API_KEY` | Day 10 LLM steps | *(placeholder)* |
+| `SERPER_API_KEY` | Day 10 geocode fallback | *(placeholder)* |
+| `COST_INPUT_PER_1K_TOKENS` | Cost estimator | `0.005` |
+| `COST_OUTPUT_PER_1K_TOKENS` | Cost estimator | `0.015` |
 
 ### Example: POST /parse request
 

@@ -1,5 +1,9 @@
 ## Session Log
 
+- 2026-08-03: Implemented Days 9 and 10 end-to-end and validated with 27 passing tests. Day 9: upgraded Postgres image to `pgvector/pgvector:pg16`, added `pgvector`, `sentence-transformers`, `tenacity`, `openai`, `pydantic-settings` to requirements; extended `config.py` to a full `Settings` class with embeddings, LLM, Serper, cost, and proxy vars; added `embedding vector(384)` column to `ParseResult`; created migration `a1b2c3d4e5f6` which enables the pgvector extension and adds embedding plus telemetry columns; implemented `app/llm/embeddings.py` with deterministic serializer, local sentence-transformers provider, company API placeholder, tenacity retry, and dimension validation; created idempotent backfill script at `backend/scripts/backfill_embeddings.py`. Day 10: added `confidence_label`, `prompt_tokens`, `completion_tokens`, `estimated_cost`, `llm_summary` to `EnrichmentResult`; added `prompt_tokens`, `completion_tokens`, `estimated_cost` to `GeocodeResult`; implemented `app/llm/summarize.py` with LLM-based confidence scoring and summary generation plus rule-based fallbacks; implemented `app/services/cost.py` (token-to-USD estimator); implemented Step 2 and Step 3 in `app/services/enrich.py`; implemented Step 4 in `app/services/geocode.py` with Serper fallback and regex business-address backfill; created `app/schemas/enrich.py`; implemented full `POST /enrich` orchestrator in `app/api/routers/enrich.py`; added `GET /parse/{id}/summary` to parse router; registered enrich router in `app/main.py`; added 19 new tests (embeddings + enrich endpoints) for 27 total. Applied migration, confirmed head at `a1b2c3d4e5f6`, all 27 tests passed. Files touched: `docker-compose.yml`, `backend/requirements.txt`, `.env.example`, `backend/app/core/config.py`, `backend/app/models/parse_result.py`, `backend/app/models/enrichment_result.py`, `backend/app/models/geocode_result.py`, `backend/alembic/versions/a1b2c3d4e5f6_day9_10_embeddings_and_telemetry.py`, `backend/app/llm/embeddings.py`, `backend/app/llm/summarize.py`, `backend/app/services/parse.py`, `backend/app/services/enrich.py`, `backend/app/services/geocode.py`, `backend/app/services/cost.py`, `backend/app/schemas/enrich.py`, `backend/app/api/routers/enrich.py`, `backend/app/api/routers/parse.py`, `backend/app/main.py`, `backend/scripts/backfill_embeddings.py`, `backend/tests/test_embeddings.py`, `backend/tests/test_enrich_endpoints.py`, `README.md`, `PROGRESS.md`. Learned: sentence-transformers downloads the model on first call (~90 MB); mock `_local_model` in tests to avoid download latency in CI. Next: begin Day 11/12 frontend work or proceed to Week 3 auth.
+
+ Verified migration head is `5d6a6d3f9c12 (head)` and reran `pytest tests/test_parse_endpoints.py -q` with `8 passed`. Also added Day 9 embeddings env scaffolding to `.env.example` (`EMBEDDINGS_PROVIDER`, model/dimension, API URL/key placeholders, timeout/fallback toggle) so planning can move straight into implementation prerequisites. Files touched: `.env.example`, `PROGRESS.md`. Learned: the updated AP plan introduces concrete Day 9 provider/model requirements that need explicit env placeholders even before code changes. Next: begin Day 9 implementation planning with pgvector extension strategy, embedding column migration, provider fallback logic in `llm/embeddings.py`, and seed-data backfill workflow.
+
 - 2026-07-23: Follow-up validation pass completed against a live Postgres instance. Confirmed `alembic upgrade head` applies cleanly and current revision is `5d6a6d3f9c12`. Ran `pytest tests/test_parse_endpoints.py -q` against the migrated database and fixed one query bug surfaced during the run: `max(UUID)` in PostgreSQL is invalid for latest-status aggregation. Replaced that logic with PostgreSQL-safe `DISTINCT ON` style selection ordered by `created_at`, then re-ran tests to green. Final state: `8 passed` in focused endpoint suite. Files touched: `backend/app/api/routers/parse.py`, `PROGRESS.md`. Learned: database-level validation is essential for aggregation logic because type/operator behavior can differ from assumptions made during pure code review. Next: optionally reduce warning noise by moving `datetime.utcnow` defaults to timezone-aware UTC and tracking upstream FastAPI/Python 3.14 deprecation warnings.
 
 - 2026-07-23: Completed Week 2 Day 8 implementation for relationships and richer queries, then aligned repository scaffolding to the target file/folder structure in `AP_Plan.md`. Added `enrichment_result` and `geocode_result` ORM models, new Alembic migration `5d6a6d3f9c12`, richer parse/input query shapes, expanded endpoint tests, `backend/app/main.py` as the canonical FastAPI entrypoint with a compatibility shim in `backend/main.py`, backend service/LLM/router placeholders, frontend scaffold files, backend container/packaging scaffolds, and a placeholder GitHub Actions workflow. Files touched: `backend/app/models/enrichment_result.py`, `backend/app/models/geocode_result.py`, `backend/app/models/parse_result.py`, `backend/app/models/raw_input.py`, `backend/app/models/__init__.py`, `backend/alembic/env.py`, `backend/alembic/versions/5d6a6d3f9c12_add_enrichment_and_geocode_results.py`, `backend/app/schemas/parse.py`, `backend/app/schemas/__init__.py`, `backend/app/api/routers/parse.py`, `backend/tests/test_parse_endpoints.py`, `backend/app/main.py`, `backend/main.py`, `backend/app/core/security.py`, `backend/app/api/routers/auth.py`, `backend/app/api/routers/enrich.py`, `backend/app/api/routers/geocode.py`, `backend/app/services/__init__.py`, `backend/app/services/parse.py`, `backend/app/services/enrich.py`, `backend/app/services/geocode.py`, `backend/app/llm/__init__.py`, `backend/app/llm/embeddings.py`, `backend/app/llm/summarize.py`, `backend/Dockerfile`, `backend/pyproject.toml`, `.github/workflows/ci.yml`, `frontend/Dockerfile`, `frontend/package.json`, `frontend/vite.config.ts`, `frontend/tailwind.config.js`, `frontend/src/main.tsx`, `frontend/src/App.tsx`, `frontend/src/api/index.ts`, `frontend/src/components/index.ts`, `frontend/src/pages/index.ts`, `frontend/src/hooks/index.ts`, `frontend/src/types/index.ts`, `README.md`, `PROGRESS.md`. Learned: the cleanest Day 8 shape is parse-centric detail plus separate parse-list and input-list query surfaces, and scaffolding the target repo layout early reduces later path churn. Next: finish trustworthy executable validation in the repo venv, then move to Day 7 seed/review work or begin real enrichment/geocode service extraction.
@@ -18,16 +22,15 @@
 
 ## Current Focus
 
-- Week 2 query/model expansion for the address enrichment pipeline.
-- Day 8 implementation is in place; remaining immediate work is clean executable validation and deciding whether to proceed with Day 7 buffer/review catch-up or continue into real enrichment service implementation.
+- Week 2 LLM pipeline complete (Days 9 and 10). All 27 tests passing.
+- Next: Day 11 frontend scaffold or Week 3 auth (JWT, protected endpoints).
 
 ## Next Actions
 
-1. Seed 10-15 realistic fake addresses for the Day 7 buffer/review task and verify the richer Day 8 query surfaces against that data.
-2. Decide whether to extract parse/enrich/geocode business logic out of routers into `backend/app/services/` before adding real provider integrations.
-3. Replace scaffold-only frontend files with a real Week 2 React/Vite UI when that milestone starts.
-4. Replace placeholder CI and auth/enrich/geocode router modules with real implementations as those milestones begin.
-5. Optionally harden datetime handling to timezone-aware UTC defaults across ORM models to remove upcoming Python deprecation risk.
+1. Decide whether to proceed to Day 11 (frontend scaffold) or Week 3 (auth / JWT / protected endpoints) first.
+2. When LLM credentials are available, set `OPENAI_API_BASE_URL`, `OPENAI_API_KEY`, and optionally `SERPER_API_KEY` in `.env` and smoke-test `POST /enrich` against a real address via Swagger.
+3. Run `python -m scripts.backfill_embeddings --dry-run` to verify embedding backfill path before running live against all rows.
+4. Optionally: switch to timezone-aware `datetime.now(timezone.utc)` across ORM defaults to clear deprecation warnings.
 
 ## Status at a Glance
 
@@ -39,6 +42,8 @@
 - Day 5 (DB connection + schema): ✅ complete
 - Day 6 (parse endpoints + persistence): ✅ complete
 - Day 8 (relationships + richer queries): ✅ implementation and focused validation complete
+- Day 9 (embeddings): ✅ complete — pgvector, embedding column, sentence-transformers, backfill script
+- Day 10 (full enrichment pipeline): ✅ complete — 4-step pipeline, confidence, cost, summary endpoint
 
 ## Day-by-Day Checklist (Week 1)
 
@@ -52,7 +57,9 @@
 
 ## Day-by-Day Checklist (Week 2)
 
-- [x] Day 8 — Relationships and richer queries. Added `enrichment_result` and `geocode_result`, joined parse detail reads, parse/input filtering, pagination, and test coverage. (Completed 2026-07-23; explicit terminal confirmation of test/migration exit codes still needs follow-up.)
+- [x] Day 8 — Relationships and richer queries. Added `enrichment_result` and `geocode_result`, joined parse detail reads, parse/input filtering, pagination, and test coverage. (Completed and revalidated on 2026-07-23 with migration head + focused tests green.)
+- [x] Day 9 — LLM integration part 1 (embeddings): pgvector extension, embedding column, sentence-transformers provider, company API placeholder, backfill script. (Completed 2026-08-03; all 27 tests pass, migration at a1b2c3d4e5f6.)
+- [x] Day 10 — LLM integration part 2 (full pipeline): POST /enrich with Steps 1-4, GET /parse/{id}/summary, confidence scoring, cost estimator, tenacity retry, Serper placeholder. (Completed 2026-08-03.)
 
 ## What Exists So Far
 
@@ -64,6 +71,7 @@
 | `.gitignore` | created | Ignores local Python environment files, caches, and coverage artifacts. |
 | `docker-compose.yml` | created | Local Postgres service scaffold for Day 5 development. |
 | `.env.example` | created | Example app and database environment variables for local setup. |
+| `.env.example` | updated | Added Day 9 embedding provider placeholders (model/dimension/API/fallback controls). |
 | `backend/app/` | created | Package scaffolding with `db`, `models`, and `schemas` subpackages. |
 | `backend/tests/` | created | Test package scaffold for backend tests. |
 | `backend/main.py` | created | FastAPI app with `GET /health` endpoint. |
@@ -126,3 +134,4 @@
 - For Day 8, keep the detail route parse-centric (`GET /parse/{id}`) and use separate parse-list vs input-list query surfaces so list endpoints stay summary-oriented.
 - Store `geocode_result.parse_result_id` in addition to optional `enrichment_result_id` to keep downstream presence filtering simple and avoid unnecessary deep joins.
 - Match the AP plan's target folder structure with scaffold files now, while keeping later-milestone modules clearly marked as placeholders rather than implying implementation.
+- Add Day 9 embeddings env placeholders before implementation so provider/model/dimension decisions are explicit and trackable in config.

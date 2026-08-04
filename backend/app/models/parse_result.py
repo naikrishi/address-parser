@@ -2,7 +2,8 @@ from datetime import datetime
 from uuid import uuid4
 from uuid import UUID as UUIDType
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, JSON, String
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +23,8 @@ class ParseResult(Base):
     parsed_components: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     is_complete: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     confidence_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    # nullable so existing rows and rows without embedding are safe
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(384), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
     raw_input = relationship("RawInput", back_populates="parse_results")

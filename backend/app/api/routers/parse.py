@@ -1,4 +1,5 @@
 from uuid import UUID
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, exists, func, select
@@ -6,10 +7,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
+from app.llm.summarize import generate_summary, score_confidence
 from app.models.enrichment_result import EnrichmentResult
 from app.models.geocode_result import GeocodeResult
 from app.models.parse_result import ParseResult
 from app.models.raw_input import RawInput
+from app.schemas.enrich import ParseSummaryResponse
 from app.schemas.parse import (
     InputListItem,
     InputsListResponse,
@@ -341,3 +344,59 @@ def get_inputs(
     ]
 
     return InputsListResponse(items=items, total=total_count, limit=limit, offset=offset)
+
+
+@router.get("/parse/{parse_id}/summary", response_model=ParseSummaryResponse)
+def get_parse_summary(parse_id: UUID, db: Session = Depends(get_db)) -> ParseSummaryResponse:
+    row = db.scalar(
+        select(ParseResult)
+        .options(
+            selectinload(ParseResult.raw_input),
+            selectinload(ParseResult.enrichment_results),
+            selectinload(ParseResult.geocode_results),
+        )
+        .where(ParseResult.id == parse_id)
+    )
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parse result not found")
+
+    # Use cached summary if enrichment has already run
+    enrichment = row.enrichment_results[-1] if row.enrichment_results else None
+    if enrichment and enrichment.llm_summary:
+        return ParseSummaryResponse(
+            parse_result_id=parse_id,
+            summary=enrichment.llm_summary,
+            confidence_label=enrichment.confidence_label,
+            generated_at=enrichment.created_at,
+        )
+
+    geocode = row.geocode_results[-1] if row.geocode_results else None
+    lat = geocode.latitude if geocode else None
+    lon = geocode.longitude if geocode else None
+    enriched = enrichment.enriched_components if enrichment else row.parsed_components
+    confidence_label = enrichment.confidence_label if enrichment else None
+
+    if confidence_label is None:
+        confidence_label, _, _ = score_confidence(
+            row.raw_input.raw_address,
+            dict(row.parsed_components),
+            dict(enriched),
+            lat is not None,
+        )
+
+    summary = generate_summary(
+        raw_address=row.raw_input.raw_address,
+        parsed_components=dict(row.parsed_components),
+        enriched_components=dict(enriched),
+        lat=lat,
+        lon=lon,
+        confidence_label=confidence_label or "low",
+        steps_ran=[1] if not enrichment else [1, 2, 3, 4],
+    )
+
+    return ParseSummaryResponse(
+        parse_result_id=parse_id,
+        summary=summary,
+        confidence_label=confidence_label,
+        generated_at=datetime.now(timezone.utc),
+    )

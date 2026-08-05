@@ -6,12 +6,13 @@ from sqlalchemy import and_, exists, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db
+from app.api.deps import get_admin_user, get_current_user, get_db
 from app.llm.summarize import generate_summary, score_confidence
 from app.models.enrichment_result import EnrichmentResult
 from app.models.geocode_result import GeocodeResult
 from app.models.parse_result import ParseResult
 from app.models.raw_input import RawInput
+from app.models.user import User
 from app.schemas.enrich import ParseSummaryResponse
 from app.schemas.parse import (
     InputListItem,
@@ -21,6 +22,7 @@ from app.schemas.parse import (
     ParseCreateRequest,
     ParseResultResponse,
 )
+from app.services.audit import record_audit_event
 
 router = APIRouter(tags=["parse"])
 
@@ -148,7 +150,9 @@ def _build_input_summary_maps(
 def create_parse(
     payload: ParseCreateRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
 ) -> ParseResult:
+    _ = current_user
     parsed_components, is_complete, confidence_score = _build_parse_stub(
         raw_address=payload.raw_address,
         country_hint=payload.country_hint,
@@ -170,6 +174,16 @@ def create_parse(
         confidence_score=confidence_score,
     )
     db.add(parse_result)
+    db.flush()
+
+    record_audit_event(
+        db,
+        user=current_user,
+        action="parse.create",
+        resource_type="parse_result",
+        resource_id=str(parse_result.id),
+        raw_address=payload.raw_address,
+    )
     db.commit()
 
     query = (
@@ -189,7 +203,12 @@ def create_parse(
 
 
 @router.get("/parse/{parse_id}", response_model=ParseResultResponse)
-def get_parse(parse_id: UUID, db: Session = Depends(get_db)) -> ParseResult:
+def get_parse(
+    parse_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ParseResult:
+    _ = current_user
     query = (
         select(ParseResult)
         .options(
@@ -217,7 +236,9 @@ def get_parses(
     has_enrichment: bool | None = Query(default=None),
     has_geocode: bool | None = Query(default=None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> ParseListResponse:
+    _ = current_user
     filters = []
     if parser_name is not None:
         filters.append(ParseResult.parser_name == parser_name.strip())
@@ -285,7 +306,9 @@ def get_inputs(
     has_enrichment: bool | None = Query(default=None),
     has_geocode: bool | None = Query(default=None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> InputsListResponse:
+    _ = current_user
     filters = []
     if input_source is not None:
         filters.append(RawInput.input_source == input_source.strip())
@@ -347,7 +370,12 @@ def get_inputs(
 
 
 @router.get("/parse/{parse_id}/summary", response_model=ParseSummaryResponse)
-def get_parse_summary(parse_id: UUID, db: Session = Depends(get_db)) -> ParseSummaryResponse:
+def get_parse_summary(
+    parse_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ParseSummaryResponse:
+    _ = current_user
     row = db.scalar(
         select(ParseResult)
         .options(

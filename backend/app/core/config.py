@@ -23,6 +23,28 @@ class Settings(BaseSettings):
         alias="DATABASE_URL",
     )
 
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"],
+        alias="CORS_ORIGINS",
+    )
+    cors_allow_methods: list[str] = Field(
+        default_factory=lambda: ["GET", "POST", "OPTIONS"],
+        alias="CORS_ALLOW_METHODS",
+    )
+    cors_allow_headers: list[str] = Field(
+        default_factory=lambda: ["Authorization", "Content-Type", "Accept"],
+        alias="CORS_ALLOW_HEADERS",
+    )
+
+    # Auth
+    jwt_secret_key: str = Field(default="dev-only-change-me", alias="JWT_SECRET_KEY")
+    jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
+    access_token_expire_minutes: int = Field(default=15, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
+    refresh_token_expire_days: int = Field(default=7, alias="REFRESH_TOKEN_EXPIRE_DAYS")
+    auth_bcrypt_rounds: int = Field(default=12, alias="AUTH_BCRYPT_ROUNDS")
+    auth_rate_limit_per_minute: int = Field(default=10, alias="AUTH_RATE_LIMIT_PER_MINUTE")
+    auth_rate_limit_window_seconds: int = Field(default=60, alias="AUTH_RATE_LIMIT_WINDOW_SECONDS")
+
     # Embeddings
     embeddings_provider: Literal["local", "company_api"] = Field(
         default="local", alias="EMBEDDINGS_PROVIDER"
@@ -69,6 +91,38 @@ class Settings(BaseSettings):
         if v <= 0:
             raise ValueError("embeddings_dimension must be positive")
         return v
+
+    @field_validator(
+        "access_token_expire_minutes",
+        "refresh_token_expire_days",
+        "auth_bcrypt_rounds",
+        "auth_rate_limit_per_minute",
+        "auth_rate_limit_window_seconds",
+    )
+    @classmethod
+    def validate_positive_ints(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("auth configuration values must be positive")
+        return v
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value: object) -> list[str]:
+        if isinstance(value, str):
+            parsed = [origin.strip() for origin in value.split(",") if origin.strip()]
+            return parsed or ["http://localhost:5173", "http://127.0.0.1:5173"]
+        if isinstance(value, list):
+            return [str(origin).strip() for origin in value if str(origin).strip()]
+        return ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+    @field_validator("cors_allow_methods", "cors_allow_headers", mode="before")
+    @classmethod
+    def parse_csv_to_list(cls, value: object) -> list[str]:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        return []
 
 
 @lru_cache(maxsize=1)

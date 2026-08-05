@@ -151,6 +151,28 @@ The first week should produce a clear spec, not code. If the pipeline contract i
 
 The backend covers Days 6, 8, 9, and 10 — parsing through full LLM enrichment:
 
+## Security and Privacy (Day 19)
+
+Day 19 hardening introduces three baseline controls:
+
+- Auth rate limiting on `POST /auth/token` (in-memory limiter keyed by client IP + username).
+- Audit logging for sensitive actions (`auth.register`, `auth.login`, `auth.refresh`, `parse.create`, `enrich.run`).
+- Tighter CORS configuration using explicit method/header allowlists.
+
+### PII handling policy
+
+- Raw addresses are operationally required for parsing/enrichment and remain in `raw_input.raw_address`.
+- Audit logs store only a redacted address form in `audit_event.raw_address_redacted`.
+- Numeric street tokens are masked before persistence in audit events.
+- Avoid logging full addresses to application logs; use IDs and redacted values for diagnostics.
+
+### New security-related environment variables
+
+- `AUTH_RATE_LIMIT_PER_MINUTE` (default `10`)
+- `AUTH_RATE_LIMIT_WINDOW_SECONDS` (default `60`)
+- `CORS_ALLOW_METHODS` (default `GET,POST,OPTIONS`)
+- `CORS_ALLOW_HEADERS` (default `Authorization,Content-Type,Accept`)
+
 **Parse endpoints (Day 6 + 8)**
 - `POST /parse` — write raw input + parse result, return full parse record.
 - `GET /parse/{id}` — parse record with related enrichment/geocode rows.

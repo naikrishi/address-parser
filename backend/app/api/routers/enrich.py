@@ -5,23 +5,30 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.deps import get_db
+from app.api.deps import get_admin_user, get_current_user, get_db
 from app.llm.embeddings import embed_text
 from app.llm.summarize import generate_summary, score_confidence
 from app.models.enrichment_result import EnrichmentResult
 from app.models.geocode_result import GeocodeResult
 from app.models.parse_result import ParseResult
 from app.models.raw_input import RawInput
+from app.models.user import User
 from app.schemas.enrich import EnrichRequest, EnrichResponse, EnrichmentStepTrace
 from app.services import enrich as enrich_svc
 from app.services import geocode as geocode_svc
+from app.services.audit import record_audit_event
 from app.services.cost import estimate_cost
 
 router = APIRouter(prefix="/enrich", tags=["enrich"])
 
 
 @router.post("", response_model=EnrichResponse, status_code=status.HTTP_201_CREATED)
-def run_enrich(payload: EnrichRequest, db: Session = Depends(get_db)) -> EnrichResponse:
+def run_enrich(
+    payload: EnrichRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+) -> EnrichResponse:
+    _ = current_user
     row = db.scalar(
         select(ParseResult)
         .options(selectinload(ParseResult.raw_input))
@@ -123,6 +130,15 @@ def run_enrich(payload: EnrichRequest, db: Session = Depends(get_db)) -> EnrichR
         steps_ran=steps_ran,
     )
     enrichment.llm_summary = summary_text
+
+    record_audit_event(
+        db,
+        user=current_user,
+        action="enrich.run",
+        resource_type="enrichment_result",
+        resource_id=str(enrichment.id),
+        raw_address=raw_address,
+    )
 
     db.commit()
 

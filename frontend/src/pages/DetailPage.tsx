@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router-dom";
+import { ApiError } from "../api";
 import { StepCard } from "../components";
 import { useParseDetail } from "../hooks";
 import type {
@@ -31,7 +32,7 @@ function toStatus(value: string): PipelineStep["status"] {
 		return "in_progress";
 	}
 	if (value === "error") {
-		return "pending";
+		return "error";
 	}
 	return "skipped";
 }
@@ -110,11 +111,20 @@ export function DetailPage() {
 	}
 
 	if (isError || !data) {
+		const status = error instanceof ApiError ? error.status : null;
+		const message =
+			status === 404
+				? "Parse record not found. It may have been deleted or the link is stale."
+				: status === 401 || status === 403
+					? "Your session has expired or you do not have access to this record."
+					: error instanceof Error
+						? error.message
+						: "Unknown error";
 		return (
 			<main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-white px-4 py-10 sm:px-6 lg:px-8">
 				<div className="mx-auto max-w-4xl rounded-xl border border-rose-200 bg-rose-50 p-8 text-center text-rose-800 shadow-sm">
 					<p className="font-semibold">Could not load parse detail.</p>
-					<p className="mt-2 text-sm">{error instanceof Error ? error.message : "Unknown error"}</p>
+					<p className="mt-2 text-sm">{message}</p>
 					<button
 						type="button"
 						onClick={() => void refetch()}

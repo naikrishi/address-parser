@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getInputs } from "../api";
+import { ApiError, getInputs } from "../api";
 import type { InputsListResponse, InputsQueryParams } from "../types";
 
 export const inputsQueryKey = (params: InputsQueryParams = {}): readonly [string, InputsQueryParams] => [
@@ -11,7 +11,12 @@ export function useInputs(params: InputsQueryParams = {}) {
 	return useQuery<InputsListResponse>({
 		queryKey: inputsQueryKey(params),
 		queryFn: () => getInputs(params),
-		retry: 1,
+		retry: (failureCount, error) => {
+			if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+				return false;
+			}
+			return failureCount < 1;
+		},
 		staleTime: 30_000,
 	});
 }

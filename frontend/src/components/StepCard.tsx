@@ -7,6 +7,7 @@ interface StepCardProps {
 const STATUS_STYLES: Record<PipelineStepStatus, string> = {
   complete: "bg-emerald-100 text-emerald-800",
   in_progress: "bg-amber-100 text-amber-800",
+  error: "bg-rose-100 text-rose-800",
   pending: "bg-slate-100 text-slate-800",
   skipped: "bg-zinc-100 text-zinc-600",
 };
@@ -14,6 +15,7 @@ const STATUS_STYLES: Record<PipelineStepStatus, string> = {
 const STATUS_LABELS: Record<PipelineStepStatus, string> = {
   complete: "Complete",
   in_progress: "In Progress",
+  error: "Error",
   pending: "Pending",
   skipped: "Skipped",
 };

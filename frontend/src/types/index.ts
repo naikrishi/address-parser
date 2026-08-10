@@ -1,6 +1,7 @@
 export type PipelineStepStatus =
 	| "complete"
 	| "in_progress"
+	| "error"
 	| "pending"
 	| "skipped";
 
@@ -27,6 +28,29 @@ export interface InputListItem {
 
 export interface InputsListResponse {
 	items: InputListItem[];
+	total: number;
+	limit: number;
+	offset: number;
+}
+
+export interface ParseListItem {
+	id: string;
+	raw_input_id: string;
+	parser_name: string;
+	is_complete: boolean;
+	confidence_score: number;
+	created_at: string;
+	raw_address: string;
+	input_source: string;
+	country_hint: string | null;
+	enrichment_result_count: number;
+	geocode_result_count: number;
+	latest_enrichment_status: string | null;
+	latest_geocode_status: string | null;
+}
+
+export interface ParseListResponse {
+	items: ParseListItem[];
 	total: number;
 	limit: number;
 	offset: number;

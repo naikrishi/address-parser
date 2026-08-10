@@ -1,5 +1,6 @@
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { clearAuthTokens, getAccessToken, getMe, login } from "../api";
+import { clearAuthTokens, getAccessToken, getMe, login, onAuthExpired } from "../api";
 import type { LoginRequest } from "../types";
 
 const meQueryKey = ["auth", "me"] as const;
@@ -23,9 +24,19 @@ export function useAuth() {
 		},
 	});
 
+	useEffect(() => {
+		const unsubscribe = onAuthExpired(() => {
+			clearAuthTokens();
+			queryClient.cancelQueries();
+			queryClient.clear();
+		});
+		return unsubscribe;
+	}, [queryClient]);
+
 	function logout(): void {
 		clearAuthTokens();
-		queryClient.removeQueries({ queryKey: meQueryKey });
+		queryClient.cancelQueries();
+		queryClient.clear();
 	}
 
 	return {

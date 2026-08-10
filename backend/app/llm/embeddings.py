@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import hashlib
+import math
 from typing import TYPE_CHECKING
 
 import httpx
@@ -27,6 +29,20 @@ def _get_local_model():
         logger.info("Loading local embedding model: %s", settings.embeddings_model)
         _local_model = SentenceTransformer(settings.embeddings_model)
     return _local_model
+
+
+def _embed_via_deterministic_fallback(text: str, dimension: int) -> list[float]:
+    """Generate a stable embedding-like vector without external ML packages."""
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    seed = int.from_bytes(digest[:8], "big", signed=False)
+    state = seed or 1
+    values: list[float] = []
+    for _ in range(dimension):
+        state = (1664525 * state + 1013904223) % (2**32)
+        values.append((state / 2**31) - 1.0)
+
+    norm = math.sqrt(sum(value * value for value in values)) or 1.0
+    return [value / norm for value in values]
 
 
 def serialize_for_embedding(raw_address: str, parsed_components: dict) -> str:
@@ -66,7 +82,13 @@ def _embed_via_company_api(text: str) -> list[float]:
 
 
 def _embed_via_local_model(text: str) -> list[float]:
-    model = _get_local_model()
+    settings = get_settings()
+    try:
+        model = _get_local_model()
+    except ImportError:
+        logger.info("sentence-transformers not installed; using deterministic fallback embeddings")
+        return _embed_via_deterministic_fallback(text, settings.embeddings_dimension)
+
     vector = model.encode(text, normalize_embeddings=True)
     return vector.tolist()
 

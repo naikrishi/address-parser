@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { createParse, runEnrich } from "../api";
 import { SearchBox } from "../components";
-import { useAuth, useInputs } from "../hooks";
+import { useAuth, useInputs, useParses } from "../hooks";
 import type { EnrichResponse, ParseCreateRequest, RankedEnrichResult } from "../types";
 
 const LIST_LIMIT = 20;
@@ -39,8 +39,21 @@ export function PipelinePage() {
     limit: LIST_LIMIT,
     offset: 0,
   });
+  const { data: parseData } = useParses({
+    limit: 200,
+    offset: 0,
+  });
 
   const items = data?.items ?? [];
+  const latestParseByInputId = useMemo(() => {
+    const byInputId = new Map<string, string>();
+    for (const parse of parseData?.items ?? []) {
+      if (!byInputId.has(parse.raw_input_id)) {
+        byInputId.set(parse.raw_input_id, parse.id);
+      }
+    }
+    return byInputId;
+  }, [parseData]);
 
   const topResult = useMemo(() => rankedResults[0], [rankedResults]);
 
@@ -202,6 +215,19 @@ export function PipelinePage() {
                     <dd className="font-medium text-slate-800">{item.geocode_result_count}</dd>
                   </div>
                 </dl>
+
+                <div className="mt-4 flex items-center justify-end">
+                  {latestParseByInputId.has(item.id) ? (
+                    <Link
+                      to={`/parse/${latestParseByInputId.get(item.id)}`}
+                      className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                    >
+                      Open latest parse
+                    </Link>
+                  ) : (
+                    <span className="text-xs text-slate-500">No parse detail available yet</span>
+                  )}
+                </div>
 
               </article>
             ))}

@@ -9,3 +9,4 @@ test_output.txt
 playwright-report/
 test-results/
 .auth/
+frontend/node_modules/

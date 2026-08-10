@@ -1,5 +1,11 @@
 ## Session Log
 
+- 2026-08-10: Implemented Week 4 Day 22 CI/CD pipeline foundation. Replaced placeholder workflow in `.github/workflows/ci.yml` with concrete jobs for backend lint (`ruff`), backend pytest (with pgvector Postgres service + Alembic migrations), frontend lint (ESLint), frontend unit tests (Vitest), and backend/frontend Docker image build verification. Added backend lint dependency/config (`backend/requirements.txt`, `backend/pyproject.toml`) and frontend lint scaffolding (`frontend/.eslintrc.cjs`, `frontend/.eslintignore`, `frontend/package.json` scripts/devDependencies). Verified backend gates locally: `ruff check backend` passes and `pytest backend/tests/test_auth_endpoints.py -q` passes (`11 passed`). Frontend dependency installation is currently blocked in this shell by npm auth (`E401 Incorrect or missing password`), so frontend lint/vitest verification is pending runner/credential context. Next: validate workflow by opening a PR and configure branch protection required checks (`backend-pytest`, `frontend-vitest`, `docker-build-backend`, `docker-build-frontend`) so failing required jobs block merge.
+
+- 2026-08-10: Ran a live `docker compose up --build` after fixing backend list-valued env parsing in `docker-compose.yml` and `.env.example`. The stack now reaches a healthy backend and a ready frontend: Alembic starts, Uvicorn serves `/health` with 200, and Vite reports `ready` on port 5173. The only remaining runtime noise is a PostgreSQL collation-version warning from the pre-existing volume; it does not block startup. Next: if desired, run detached compose plus browser/API smoke checks, or leave the stack as validated at startup.
+
+- 2026-08-10: Trimmed the backend image’s heavy ML path while keeping the AP plan enrichment outline intact. Removed `sentence-transformers` from `backend/requirements.txt` so the default backend container no longer pulls the torch stack, and updated `backend/app/llm/embeddings.py` to fall back to a deterministic standard-library embedding vector when `sentence-transformers` is unavailable. Verified both container builds now complete: `docker compose build --no-cache frontend` and `docker compose build --no-cache backend` both finished successfully, with the backend build now reaching the lighter dependency set instead of the previous ML wheel download penalty. Next: if needed, run a backend startup smoke test or full compose bring-up now that the images are buildable.
+
 - 2026-08-06: Started Day 20 and Day 21 implementation. Added backend auth negative-path test support via shared helper module `backend/tests/auth_test_utils.py` and expanded coverage in `backend/tests/test_auth_endpoints.py`, `backend/tests/test_parse_endpoints.py`, and `backend/tests/test_enrich_endpoints.py` for missing token, malformed token, expired token, and admin-role enforcement paths. Hardened `POST /auth/refresh` in `backend/app/api/routers/auth.py` so malformed/expired refresh tokens now return `401` instead of bubbling an unhandled error. Added container bootstrap scripts `backend/scripts/start.sh` and `backend/scripts/seed_admin.py`; backend container now runs Alembic migrations and idempotently seeds an admin account before starting the API. Expanded `docker-compose.yml` from Postgres-only to full-stack orchestration (`postgres`, `backend`, `frontend`) with health checks, env wiring, and seeded admin defaults. Added Playwright scaffolding in `frontend/package.json`, `frontend/playwright.config.ts`, and `frontend/tests/e2e/login-enrich.spec.ts` for login -> enrich coverage using seeded admin credentials. Updated `.gitignore` for Playwright artifacts. Verification status: static diagnostics are clean on changed Python/TypeScript files, but executable integration validation is currently blocked because local Docker Desktop is not running (`docker compose up -d postgres` cannot connect to the Docker engine) and backend integration tests require Postgres. Next: start Docker Desktop, run targeted backend pytest modules, install frontend dependencies if needed, run Playwright e2e, then update milestone status to complete.
 
 - 2026-08-05: Day 16 milestone checkpoint: JWT login and refresh token flow is complete and active (`POST /auth/token`, `POST /auth/refresh`) with access/refresh issuance, token-type validation, and endpoint coverage in auth tests.
@@ -40,15 +46,15 @@
 
 ## Current Focus
 
-- Week 3 Day 20 and Day 21 implementation is in progress: auth negative-path coverage, Playwright e2e scaffolding, and full-stack compose orchestration are now in code.
-- Final executable verification is pending local Docker availability because backend integration tests and compose smoke tests need Postgres and the Docker engine.
+- Week 4 Day 22 CI/CD is implemented in-repo: workflow jobs and lint scaffolding are in place for backend/frontend plus Docker build verification.
+- Immediate follow-up is governance/runtime validation: run the workflow on a PR and enable branch protection required checks; frontend local lint/test confirmation is pending npm credential context.
 
 ## Next Actions
 
-1. Start Docker Desktop or another local Docker engine, then run `docker compose up -d postgres` from the repo root.
-2. Run `c:/Users/rn7279/address_parser/.venv/Scripts/python.exe -m pytest backend/tests/test_auth_endpoints.py backend/tests/test_parse_endpoints.py backend/tests/test_enrich_endpoints.py -q` to verify Day 20 auth negative-path coverage.
-3. Run `docker compose up --build` and confirm backend migrations, seeded admin startup, frontend reachability, and `/health` readiness.
-4. In a shell where npm trust/proxy is configured, run `npm install --prefix frontend` and `npm run test:e2e --prefix frontend` to verify the Playwright login -> enrich flow.
+1. Open a PR to trigger the new CI workflow and confirm all jobs report expected statuses.
+2. Configure GitHub branch protection required checks: `backend-pytest`, `frontend-vitest`, `docker-build-backend`, and `docker-build-frontend`.
+3. Resolve npm auth in this environment (`npm login` or token refresh), then run `npm install --prefix frontend`, `npm run lint --prefix frontend`, and `npm run test --prefix frontend -- --run`.
+4. After CI validation, mark Day 22 complete in the milestone checklist.
 
 ## Status at a Glance
 
@@ -61,14 +67,15 @@
 - Day 5 (DB connection + schema): ✅ complete
 - Day 6 (parse endpoints + persistence): ✅ complete
 - Day 8 (relationships + richer queries): ✅ implementation and focused validation complete
-- Day 9 (embeddings): ✅ complete — pgvector, embedding column, sentence-transformers, backfill script
+- Day 9 (embeddings): ✅ complete — pgvector, embedding column, fallback-capable embedding path, backfill script
 - Day 10 (full enrichment pipeline): ✅ complete — 4-step pipeline, confidence, cost, summary endpoint
 - Day 11 (frontend static scaffold): ✅ complete
 - Day 12 (frontend-backend integration): 🟡 implementation complete, runtime verification pending
 - Day 13 (detail page + enrichment UI): 🟡 implementation complete, browser/runtime verification pending
 - Day 14 (testing intro): 🟡 backend tests complete, frontend test runtime pending npm install/execution
 - Day 20 (auth integration negative paths + e2e): 🟡 implemented in code, executable verification pending Docker/Postgres + frontend dependency setup
-- Day 21 (containerization): 🟡 implemented in code, compose validation pending Docker engine availability
+- Day 21 (containerization): ✅ image builds validated for frontend and backend; compose smoke test still optional
+- Day 22 (CI/CD pipeline): 🟡 implemented in repo; PR run + branch protection enforcement pending
 
 ## Day-by-Day Checklist (Week 1)
 
@@ -158,6 +165,12 @@
 | `backend/app/services/` | created | Placeholder service-layer package for future router extraction. |
 | `backend/app/llm/` | created | Placeholder LLM integration package for later milestones. |
 | `.github/workflows/ci.yml` | created | Placeholder CI workflow so repository layout matches the plan. |
+| `.github/workflows/ci.yml` | updated | Day 22 CI workflow now runs backend lint/tests, frontend lint/vitest, and backend/frontend Docker image build checks on push + pull_request. |
+| `backend/requirements.txt` | updated | Added `ruff` to support backend lint gate in CI. |
+| `backend/pyproject.toml` | updated | Added Ruff configuration for backend lint standards used by CI. |
+| `frontend/.eslintrc.cjs` | created | Frontend ESLint ruleset for TypeScript/React hooks linting. |
+| `frontend/.eslintignore` | created | Ignores build/test artifact folders for frontend linting. |
+| `frontend/package.json` | updated | Added `lint` script and ESLint-related devDependencies for CI lint gate. |
 | `frontend/` | created | Frontend scaffold matching the target Week 2 structure. |
 
 ## Key Decisions Made
@@ -179,3 +192,4 @@
 - Add Day 9 embeddings env placeholders before implementation so provider/model/dimension decisions are explicit and trackable in config.
 - Day 20 negative-path auth tests exposed a backend inconsistency: `POST /auth/refresh` must translate JWT decode failures into `401` just like `get_current_user`, otherwise malformed/expired refresh tokens become server errors.
 - For Day 21 onboarding, the most reliable local bootstrap is migration-before-start plus an idempotent seeded admin user so Playwright and manual login flows do not depend on ad hoc pre-created accounts.
+- For Day 22, required merge blocking is achieved by combining CI job names with GitHub branch protection; workflow YAML alone does not block merges until required checks are configured in repository settings.

@@ -1,5 +1,7 @@
 ## Session Log
 
+- 2026-08-06: Started Day 20 and Day 21 implementation. Added backend auth negative-path test support via shared helper module `backend/tests/auth_test_utils.py` and expanded coverage in `backend/tests/test_auth_endpoints.py`, `backend/tests/test_parse_endpoints.py`, and `backend/tests/test_enrich_endpoints.py` for missing token, malformed token, expired token, and admin-role enforcement paths. Hardened `POST /auth/refresh` in `backend/app/api/routers/auth.py` so malformed/expired refresh tokens now return `401` instead of bubbling an unhandled error. Added container bootstrap scripts `backend/scripts/start.sh` and `backend/scripts/seed_admin.py`; backend container now runs Alembic migrations and idempotently seeds an admin account before starting the API. Expanded `docker-compose.yml` from Postgres-only to full-stack orchestration (`postgres`, `backend`, `frontend`) with health checks, env wiring, and seeded admin defaults. Added Playwright scaffolding in `frontend/package.json`, `frontend/playwright.config.ts`, and `frontend/tests/e2e/login-enrich.spec.ts` for login -> enrich coverage using seeded admin credentials. Updated `.gitignore` for Playwright artifacts. Verification status: static diagnostics are clean on changed Python/TypeScript files, but executable integration validation is currently blocked because local Docker Desktop is not running (`docker compose up -d postgres` cannot connect to the Docker engine) and backend integration tests require Postgres. Next: start Docker Desktop, run targeted backend pytest modules, install frontend dependencies if needed, run Playwright e2e, then update milestone status to complete.
+
 - 2026-08-05: Day 16 milestone checkpoint: JWT login and refresh token flow is complete and active (`POST /auth/token`, `POST /auth/refresh`) with access/refresh issuance, token-type validation, and endpoint coverage in auth tests.
 
 - 2026-08-05: Completed Week 3 Day 19 security hardening baseline. Added configurable auth rate limiting and tighter CORS configuration in `backend/app/core/config.py` (`AUTH_RATE_LIMIT_PER_MINUTE`, `AUTH_RATE_LIMIT_WINDOW_SECONDS`, `CORS_ALLOW_METHODS`, `CORS_ALLOW_HEADERS`) and applied method/header allowlists in `backend/app/main.py`. Implemented an in-memory rate limiter (`backend/app/core/rate_limit.py`) and enforced it on `POST /auth/token` in `backend/app/api/routers/auth.py` with `429` responses after threshold. Added audit-event persistence for security-sensitive actions via new model and service (`backend/app/models/audit_event.py`, `backend/app/services/audit.py`), wired into auth/parse/enrich flows (`auth.register`, `auth.login`, `auth.refresh`, `parse.create`, `enrich.run`) with address-number redaction before audit persistence. Added migration `backend/alembic/versions/b7c8d9e0f1a2_add_audit_event_table.py` and registered model imports in `backend/app/models/__init__.py` + `backend/alembic/env.py`. Extended env template in `.env.example` with new security vars. Added Day 19 tests in `backend/tests/test_security_day19.py` covering login rate-limit (`429`) and audit-event creation/redaction; all backend suites now pass `36 passed` (`test_auth_endpoints.py`, `test_parse_endpoints.py`, `test_enrich_endpoints.py`, `test_parse_service.py`, `test_security_day19.py`). Updated `README.md` with a dedicated Day 19 security/privacy section documenting rate limiting, audit logging, and PII handling expectations. Next: Day 20 negative-path auth tests (expired/malformed token, role mismatch) plus frontend e2e login→enrich once npm environment is stable.
@@ -38,20 +40,21 @@
 
 ## Current Focus
 
-- Week 2 Day 13 implementation complete in code: SearchBox submit flow and parse-detail UX are now wired.
-- Week 2 Day 14 backend tests are passing; frontend Vitest scaffolding is added but not executed in this environment due to npm-run constraints.
+- Week 3 Day 20 and Day 21 implementation is in progress: auth negative-path coverage, Playwright e2e scaffolding, and full-stack compose orchestration are now in code.
+- Final executable verification is pending local Docker availability because backend integration tests and compose smoke tests need Postgres and the Docker engine.
 
 ## Next Actions
 
-1. In a shell where npm trust/proxy is configured, run `npm install --prefix frontend` then `npm run test --prefix frontend -- src/components/StepCard.test.tsx` to validate Day 14 frontend component test.
-2. Run `npm run build --prefix frontend` and a browser smoke test for Day 13: SearchBox submit -> ranked results -> open DetailPage.
-3. Optionally add a dedicated backend endpoint to resolve parse IDs by raw input ID so list cards can deep-link directly to detail pages without relying on newly created pipeline runs.
-4. If needed, set `CORS_ORIGINS` in backend `.env` to include the active frontend origin.
+1. Start Docker Desktop or another local Docker engine, then run `docker compose up -d postgres` from the repo root.
+2. Run `c:/Users/rn7279/address_parser/.venv/Scripts/python.exe -m pytest backend/tests/test_auth_endpoints.py backend/tests/test_parse_endpoints.py backend/tests/test_enrich_endpoints.py -q` to verify Day 20 auth negative-path coverage.
+3. Run `docker compose up --build` and confirm backend migrations, seeded admin startup, frontend reachability, and `/health` readiness.
+4. In a shell where npm trust/proxy is configured, run `npm install --prefix frontend` and `npm run test:e2e --prefix frontend` to verify the Playwright login -> enrich flow.
 
 ## Status at a Glance
 
 - Week 1: 🟡 mostly complete, Day 7 buffer/review still open
 - Week 2: 🟡 in progress
+- Week 3: 🟡 in progress
 - Milestone 1 (Data Backbone): ✅ functionally achieved
 - Milestone 2 (It's Alive on Screen): 🟡 in progress
 - Day 4 (API fundamentals): ✅ complete
@@ -64,6 +67,8 @@
 - Day 12 (frontend-backend integration): 🟡 implementation complete, runtime verification pending
 - Day 13 (detail page + enrichment UI): 🟡 implementation complete, browser/runtime verification pending
 - Day 14 (testing intro): 🟡 backend tests complete, frontend test runtime pending npm install/execution
+- Day 20 (auth integration negative paths + e2e): 🟡 implemented in code, executable verification pending Docker/Postgres + frontend dependency setup
+- Day 21 (containerization): 🟡 implemented in code, compose validation pending Docker engine availability
 
 ## Day-by-Day Checklist (Week 1)
 
@@ -93,6 +98,7 @@
 | `AP_Plan.md` | updated/existing | Address-pipeline month plan and day-by-day source of truth. |
 | `PROGRESS.md` | initialized | Added the first session log and current focus. |
 | `.gitignore` | created | Ignores local Python environment files, caches, and coverage artifacts. |
+| `.gitignore` | updated | Added Playwright output directories to ignore list. |
 | `docker-compose.yml` | created | Local Postgres service scaffold for Day 5 development. |
 | `.env.example` | created | Example app and database environment variables for local setup. |
 | `.env.example` | updated | Added Day 9 embedding provider placeholders (model/dimension/API/fallback controls). |
@@ -131,6 +137,18 @@
 | `backend/app/api/routers/parse.py` | updated | Day 8 query surface adds nested detail reads, `GET /parses`, and richer `GET /inputs` filters. |
 | `backend/app/schemas/parse.py` | updated | Day 8 response/list schemas for downstream lineage and richer queries. |
 | `backend/tests/test_parse_endpoints.py` | updated | Added lineage and query-filter integration coverage. |
+| `backend/tests/auth_test_utils.py` | created | Shared auth test helpers for deterministic login, token headers, and malformed/expired token generation. |
+| `backend/tests/test_auth_endpoints.py` | updated | Added Day 20 auth negative-path coverage for missing, malformed, expired, and invalid-claim token scenarios. |
+| `backend/tests/test_parse_endpoints.py` | updated | Added malformed/expired token auth checks on protected parse/list routes. |
+| `backend/tests/test_enrich_endpoints.py` | updated | Added malformed/expired token auth checks on protected enrich route. |
+| `backend/app/api/routers/auth.py` | updated | Refresh endpoint now maps malformed/expired refresh tokens to `401` consistently. |
+| `backend/scripts/seed_admin.py` | created | Idempotent seeded admin bootstrap for compose/e2e environments. |
+| `backend/scripts/start.sh` | created | Container entrypoint that runs Alembic migrations, seeds admin user, and starts uvicorn. |
+| `backend/Dockerfile` | updated | Installs curl for health checks and uses container bootstrap entrypoint. |
+| `docker-compose.yml` | updated | Runs full stack: Postgres, backend, frontend, health checks, env wiring, and seeded admin defaults. |
+| `frontend/package.json` | updated | Added Playwright dependency and e2e scripts. |
+| `frontend/playwright.config.ts` | created | Playwright configuration targeting the login -> enrich flow. |
+| `frontend/tests/e2e/login-enrich.spec.ts` | created | E2E coverage for seeded-admin login and enrichment workflow. |
 | `backend/Dockerfile` | created | Backend container scaffold aligned with the plan's target structure. |
 | `backend/pyproject.toml` | created | Backend packaging and pytest scaffold aligned with target structure. |
 | `backend/app/core/security.py` | created | Placeholder auth utility module for later milestones. |
@@ -159,3 +177,5 @@
 - Store `geocode_result.parse_result_id` in addition to optional `enrichment_result_id` to keep downstream presence filtering simple and avoid unnecessary deep joins.
 - Match the AP plan's target folder structure with scaffold files now, while keeping later-milestone modules clearly marked as placeholders rather than implying implementation.
 - Add Day 9 embeddings env placeholders before implementation so provider/model/dimension decisions are explicit and trackable in config.
+- Day 20 negative-path auth tests exposed a backend inconsistency: `POST /auth/refresh` must translate JWT decode failures into `401` just like `get_current_user`, otherwise malformed/expired refresh tokens become server errors.
+- For Day 21 onboarding, the most reliable local bootstrap is migration-before-start plus an idempotent seeded admin user so Playwright and manual login flows do not depend on ad hoc pre-created accounts.

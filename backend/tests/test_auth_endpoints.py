@@ -1,15 +1,21 @@
 from fastapi.testclient import TestClient
-from uuid import uuid4
 
 from main import app
+from tests.auth_test_utils import (
+    auth_headers,
+    create_expired_access_token,
+    create_expired_refresh_token,
+    create_malformed_token,
+    register_and_login,
+    unique_identity,
+)
 
 
 client = TestClient(app)
 
 
 def _unique_identity(prefix: str) -> tuple[str, str]:
-    suffix = uuid4().hex[:10]
-    return (f"{prefix}_{suffix}@example.com", f"{prefix}_{suffix}")
+    return unique_identity(prefix)
 
 
 def test_register_user_success() -> None:
@@ -97,22 +103,54 @@ def test_login_rejects_wrong_password() -> None:
 
 
 def test_refresh_rejects_non_refresh_token() -> None:
-    email, username = _unique_identity("week3_refresh")
-    register_payload = {
-        "email": email,
-        "username": username,
-        "password": "S3curePassw0rd",
-        "role": "ops",
-    }
-    register_response = client.post("/auth/register", json=register_payload)
-    assert register_response.status_code == 201, register_response.text
-
-    login_response = client.post(
-        "/auth/token",
-        json={"username": register_payload["username"], "password": register_payload["password"]},
-    )
-    assert login_response.status_code == 200, login_response.text
-
-    access_token = login_response.json()["access_token"]
-    refresh_response = client.post("/auth/refresh", json={"refresh_token": access_token})
+    identity = register_and_login(client, prefix="week3_refresh", role="ops")
+    refresh_response = client.post("/auth/refresh", json={"refresh_token": identity["access_token"]})
     assert refresh_response.status_code == 401
+
+
+def test_me_rejects_missing_token() -> None:
+    response = client.get("/auth/me")
+    assert response.status_code == 403
+
+
+def test_me_rejects_malformed_token() -> None:
+    response = client.get("/auth/me", headers=auth_headers(create_malformed_token()))
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or expired token"
+
+
+def test_me_rejects_expired_access_token() -> None:
+    identity = register_and_login(client, prefix="week3_me_expired", role="admin")
+    expired_token = create_expired_access_token(subject=identity["user_id"], role="admin")
+    response = client.get("/auth/me", headers=auth_headers(expired_token))
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or expired token"
+
+
+def test_me_rejects_token_without_subject() -> None:
+    token = create_signed_access_token_without_subject()
+    response = client.get("/auth/me", headers=auth_headers(token))
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid access token"
+
+
+def test_refresh_rejects_malformed_token() -> None:
+    response = client.post("/auth/refresh", json={"refresh_token": create_malformed_token()})
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or expired token"
+
+
+def test_refresh_rejects_expired_refresh_token() -> None:
+    identity = register_and_login(client, prefix="week3_refresh_expired", role="ops")
+    expired_token = create_expired_refresh_token(subject=identity["user_id"])
+    response = client.post("/auth/refresh", json={"refresh_token": expired_token})
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or expired token"
+
+
+def create_signed_access_token_without_subject() -> str:
+    from datetime import timedelta
+
+    from tests.auth_test_utils import create_signed_token
+
+    return create_signed_token({"role": "admin", "type": "access"}, expires_in=timedelta(minutes=5))

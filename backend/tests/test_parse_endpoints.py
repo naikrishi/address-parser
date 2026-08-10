@@ -6,6 +6,12 @@ from fastapi.testclient import TestClient
 from uuid import uuid4
 
 from main import app
+from tests.auth_test_utils import (
+    auth_headers,
+    create_expired_access_token,
+    create_malformed_token,
+    register_and_login,
+)
 
 
 client = TestClient(app)
@@ -357,3 +363,18 @@ def test_ops_user_cannot_create_parse() -> None:
     )
     assert response.status_code == 403
     assert response.json()["detail"] == "Admin role required"
+
+
+def test_parse_routes_reject_malformed_token() -> None:
+    headers = auth_headers(create_malformed_token())
+    response = client.get("/inputs", headers=headers)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or expired token"
+
+
+def test_parse_routes_reject_expired_token() -> None:
+    identity = register_and_login(client, prefix="parse_expired_token", role="ops")
+    headers = auth_headers(create_expired_access_token(subject=identity["user_id"], role="ops"))
+    response = client.get("/inputs", headers=headers)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or expired token"

@@ -7,6 +7,12 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from main import app
+from tests.auth_test_utils import (
+    auth_headers,
+    create_expired_access_token,
+    create_malformed_token,
+    register_and_login,
+)
 
 client = TestClient(app)
 
@@ -144,6 +150,30 @@ def test_ops_user_cannot_run_enrich(mock_embed) -> None:
     response = client.post("/enrich", json={"parse_result_id": parse["id"]}, headers=ops_headers)
     assert response.status_code == 403
     assert response.json()["detail"] == "Admin role required"
+
+
+@patch("app.api.routers.enrich.embed_text", side_effect=_stub_embed)
+def test_enrich_rejects_malformed_token(mock_embed) -> None:
+    response = client.post(
+        "/enrich",
+        json={"parse_result_id": "00000000-0000-0000-0000-000000000000"},
+        headers=auth_headers(create_malformed_token()),
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or expired token"
+
+
+@patch("app.api.routers.enrich.embed_text", side_effect=_stub_embed)
+def test_enrich_rejects_expired_token(mock_embed) -> None:
+    identity = register_and_login(client, prefix="enrich_expired_token", role="admin")
+    expired_headers = auth_headers(create_expired_access_token(subject=identity["user_id"], role="admin"))
+    response = client.post(
+        "/enrich",
+        json={"parse_result_id": "00000000-0000-0000-0000-000000000000"},
+        headers=expired_headers,
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or expired token"
 
 
 # ---------------------------------------------------------------------------

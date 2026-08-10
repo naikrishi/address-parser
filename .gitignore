@@ -6,3 +6,6 @@ __pycache__/
 .mypy_cache/
 .coverage
 test_output.txt
+playwright-report/
+test-results/
+.auth/

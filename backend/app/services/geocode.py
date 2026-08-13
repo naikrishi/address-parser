@@ -13,6 +13,7 @@ import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.config import get_settings
+from app.services.local_geocoder import geocode_with_nominatim
 from app.services.cost import estimate_cost
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,11 @@ def _llm_available() -> bool:
 
 def _serper_available() -> bool:
     return bool(get_settings().serper_api_key)
+
+
+def _local_geocoder_available() -> bool:
+    settings = get_settings()
+    return settings.geocoder_provider == "nominatim" and bool(settings.geocoder_base_url)
 
 
 @retry(
@@ -101,7 +107,22 @@ def run_step4(
         (latitude, longitude, result_payload, backfill_components,
          prompt_tokens, completion_tokens, cost_usd, provider_name)
     """
-    if _llm_available():
+    if _local_geocoder_available():
+        settings = get_settings()
+        try:
+            payload, pt, ct, provider = geocode_with_nominatim(
+                base_url=settings.geocoder_base_url,
+                timeout_seconds=settings.geocoder_timeout_seconds,
+                address_str=address_str,
+            )
+            lat = payload.get("latitude")
+            lon = payload.get("longitude")
+            backfill = _extract_backfill(payload, enriched_components)
+            return lat, lon, payload, backfill, pt, ct, 0.0, provider
+        except Exception as exc:
+            logger.warning("Local geocoder failed (%s); trying next provider", exc)
+
+    if _llm_available() and not get_settings().use_local_models_only:
         try:
             payload, pt, ct = _geocode_via_llm(address_str)
             lat = payload.get("latitude")
@@ -112,7 +133,7 @@ def run_step4(
         except Exception as exc:
             logger.warning("LLM geocode failed (%s); trying Serper fallback", exc)
 
-    if _serper_available():
+    if _serper_available() and not get_settings().use_local_models_only:
         try:
             serper_data = _geocode_via_serper(address_str)
             places = serper_data.get("places", [])

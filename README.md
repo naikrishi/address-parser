@@ -2,7 +2,7 @@
 
 A production-minded full-stack application that turns messy address text into structured, usable location data.
 
-This project demonstrates how to design and ship a real-world data pipeline, not just an API demo. It combines parsing, enrichment, geocoding, security controls, and a usable frontend experience in one coherent system.
+This project demonstrates how to design and ship a real-world data pipeline. It combines parsing, enrichment, geocoding, security controls, and a usable frontend experience in one system.
 
 ## Why This Project Matters
 

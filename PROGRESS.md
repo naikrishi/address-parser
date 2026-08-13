@@ -1,5 +1,17 @@
 ## Session Log
 
+- 2026-08-13: Completed a full frontend visual refresh to move away from the default AI look. Added a distinct typography system (Fraunces + Manrope + IBM Plex Mono), a bold single-direction palette, layered atmospheric backgrounds, and a coordinated staggered reveal animation pattern across login, pipeline, detail, and shared components. Follow-up copy pass removed em dashes and simplified user-facing text to sound more natural and direct. Verified frontend compiles cleanly with `npm run build`. Files touched: `frontend/src/index.css`, `frontend/src/pages/LoginPage.tsx`, `frontend/src/pages/PipelinePage.tsx`, `frontend/src/pages/DetailPage.tsx`, `frontend/src/components/SearchBox.tsx`, `frontend/src/components/StepCard.tsx`, `frontend/src/components/ProtectedRoute.tsx`, `PROGRESS.md`.
+
+- 2026-08-10: Fixed local dev stack. Root causes found and resolved: (1) `backend/app/core/config.py` `env_file` was `".env"` (relative) so pydantic_settings never found the repo-root `.env` when running from `backend/` — changed to `env_file=(".env", "../.env")`; (2) `CORS_ORIGINS` in `.env` now includes ports 5173 and 5174 in JSON array format; (3) `sentence-transformers` + `torch` were still installed in the local venv even after being removed from `requirements.txt` — uninstalled them so the fast hash-based fallback embedder runs instead of triggering a 90MB HuggingFace model download on every enrich call. Stack now starts cleanly: `docker start address_parser_postgres` → uvicorn from `backend/` → `npm run dev --prefix frontend` (port 5174). Login and enrichment both work end-to-end.
+
+- 2026-08-10: UI polish pass across PipelinePage and DetailPage. PipelinePage: replaced stale "Day 12 live integration" subtitle; replaced spinner with 3-card pulse skeleton; improved empty states with contextual admin/ops messaging; removed debug "Top result parse id" line; added `break-words min-w-0` for mobile. DetailPage: 4-card skeleton loading; added Enrichment Summary card (confidence badge, provider, status, error); added Geocode Coordinates card; confidence displayed as percentage; improved Nearby Businesses empty state. ESLint clean, Vitest 3 passed.
+
+
+
+ Updated CI `deploy-backend` job to use `azure/login@v2` + `az acr login` + Docker build/push to ACR + `azure/container-apps-deploy-action@v2`. Target Azure stack: Container Apps (backend hosting), PostgreSQL Flexible Server (managed Postgres with pgvector built-in), Container Registry (image store). GitHub secrets required: `AZURE_CREDENTIALS`, `ACR_NAME`, `ACR_LOGIN_SERVER`, `AZURE_RESOURCE_GROUP`, `AZURE_CONTAINER_APP_NAME`. Added `deploy-azure.sh` one-shot provisioning script designed to run from Azure Cloud Shell (shell.azure.com) — avoids local admin/install restrictions. Script creates RG + ACR + Postgres (with pgvector) + Container Apps environment + Container App, seeds admin user, and prints the public FQDN plus GitHub Actions secret values. Files touched: `.github/workflows/ci.yml`, `deploy-azure.sh`.
+
+- 2026-08-10: Implemented Week 4 Day 23 cloud deployment foundations. Added `APP_ENV` setting to `backend/app/core/config.py` and gated `/docs`, `/redoc`, and `/openapi.json` off when `APP_ENV=production` in `backend/app/main.py` (attack surface reduction). Extended `.github/workflows/ci.yml` with a `deploy-backend` CD job. Verified auth test suite still passes (`11 passed`) after the config/main changes.
+
 - 2026-08-10: Implemented Week 4 Day 22 CI/CD pipeline foundation. Replaced placeholder workflow in `.github/workflows/ci.yml` with concrete jobs for backend lint (`ruff`), backend pytest (with pgvector Postgres service + Alembic migrations), frontend lint (ESLint), frontend unit tests (Vitest), and backend/frontend Docker image build verification. Added backend lint dependency/config (`backend/requirements.txt`, `backend/pyproject.toml`) and frontend lint scaffolding (`frontend/.eslintrc.cjs`, `frontend/.eslintignore`, `frontend/package.json` scripts/devDependencies). Verified backend gates locally: `ruff check backend` passes and `pytest backend/tests/test_auth_endpoints.py -q` passes (`11 passed`). Frontend dependency installation is currently blocked in this shell by npm auth (`E401 Incorrect or missing password`), so frontend lint/vitest verification is pending runner/credential context. Next: validate workflow by opening a PR and configure branch protection required checks (`backend-pytest`, `frontend-vitest`, `docker-build-backend`, `docker-build-frontend`) so failing required jobs block merge.
 
 - 2026-08-10: Ran a live `docker compose up --build` after fixing backend list-valued env parsing in `docker-compose.yml` and `.env.example`. The stack now reaches a healthy backend and a ready frontend: Alembic starts, Uvicorn serves `/health` with 200, and Vite reports `ready` on port 5173. The only remaining runtime noise is a PostgreSQL collation-version warning from the pre-existing volume; it does not block startup. Next: if desired, run detached compose plus browser/API smoke checks, or leave the stack as validated at startup.
@@ -46,21 +58,23 @@
 
 ## Current Focus
 
-- Week 4 Day 22 CI/CD is implemented in-repo: workflow jobs and lint scaffolding are in place for backend/frontend plus Docker build verification.
-- Immediate follow-up is governance/runtime validation: run the workflow on a PR and enable branch protection required checks; frontend local lint/test confirmation is pending npm credential context.
+- Week 4 Day 23 cloud deployment foundations are in place: `render.yaml` blueprint, production docs gating, and CI CD deploy job are all committed.
+- Immediate follow-up requires boss-approved access: Render account, pgvector on managed Postgres, and secrets (JWT key, LLM proxy URL/key, Serper key) set in Render dashboard.
+- Day 22 CI is fully implemented; PR run + GitHub branch protection configuration remains pending.
 
 ## Next Actions
 
-1. Open a PR to trigger the new CI workflow and confirm all jobs report expected statuses.
-2. Configure GitHub branch protection required checks: `backend-pytest`, `frontend-vitest`, `docker-build-backend`, and `docker-build-frontend`.
-3. Resolve npm auth in this environment (`npm login` or token refresh), then run `npm install --prefix frontend`, `npm run lint --prefix frontend`, and `npm run test --prefix frontend -- --run`.
-4. After CI validation, mark Day 22 complete in the milestone checklist.
+1. **Open Azure Cloud Shell** → go to **https://shell.azure.com**, choose **Bash**
+2. Upload or clone this repo into Cloud Shell, then run `chmod +x deploy-azure.sh && ./deploy-azure.sh`
+3. After the script finishes, copy the output and add the 5 GitHub Actions secrets it prints.
+4. Run `az ad sp create-for-rbac ...` (printed by the script) to generate `AZURE_CREDENTIALS`.
+5. Open a PR to trigger CI; the `deploy-backend` job will fire on merge to main.
+6. After verifying `/health` and `/docs` work, gate docs: `az containerapp update -n address-parser-backend -g address-parser-rg --set-env-vars APP_ENV=production`
+7. Configure GitHub branch protection required checks: `backend-pytest`, `frontend-vitest`, `docker-build-backend`, `docker-build-frontend`.
 
 ## Status at a Glance
 
-- Week 1: 🟡 mostly complete, Day 7 buffer/review still open
-- Week 2: 🟡 in progress
-- Week 3: 🟡 in progress
+- Week 4: 🟡 in progress
 - Milestone 1 (Data Backbone): ✅ functionally achieved
 - Milestone 2 (It's Alive on Screen): 🟡 in progress
 - Day 4 (API fundamentals): ✅ complete
@@ -76,6 +90,7 @@
 - Day 20 (auth integration negative paths + e2e): 🟡 implemented in code, executable verification pending Docker/Postgres + frontend dependency setup
 - Day 21 (containerization): ✅ image builds validated for frontend and backend; compose smoke test still optional
 - Day 22 (CI/CD pipeline): 🟡 implemented in repo; PR run + branch protection enforcement pending
+- Day 23 (cloud deploy): 🟡 `render.yaml` + production docs gating + CI deploy job in repo; actual deploy pending cloud platform access from boss
 
 ## Day-by-Day Checklist (Week 1)
 

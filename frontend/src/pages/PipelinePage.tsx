@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { createParse, runEnrich } from "../api";
 import { SearchBox } from "../components";
 import { useAuth, useInputs, useParses } from "../hooks";
-import type { EnrichResponse, ParseCreateRequest, RankedEnrichResult } from "../types";
+import type { EnrichResponse, InputListItem, ParseCreateRequest, RankedEnrichResult } from "../types";
 
 const LIST_LIMIT = 20;
 
@@ -34,17 +34,32 @@ export function PipelinePage() {
   const [rankedResults, setRankedResults] = useState<RankedEnrichResult[]>([]);
   const [isSubmittingSearch, setIsSubmittingSearch] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [allItems, setAllItems] = useState<InputListItem[]>([]);
 
   const { data, isLoading, isError, error, refetch, isFetching } = useInputs({
     limit: LIST_LIMIT,
-    offset: 0,
+    offset,
   });
   const { data: parseData } = useParses({
     limit: 200,
     offset: 0,
   });
 
-  const items = data?.items ?? [];
+  // Append on load-more (offset > 0), replace on fresh load (offset === 0).
+  useEffect(() => {
+    if (!data?.items) return;
+    if (offset === 0) {
+      setAllItems(data.items);
+    } else {
+      setAllItems((prev) => {
+        const seen = new Set(prev.map((i) => i.id));
+        return [...prev, ...data.items.filter((i) => !seen.has(i.id))];
+      });
+    }
+  }, [data, offset]);
+
+  const items = allItems;
   const latestParseByInputId = useMemo(() => {
     const byInputId = new Map<string, string>();
     for (const parse of parseData?.items ?? []) {
@@ -55,8 +70,6 @@ export function PipelinePage() {
     return byInputId;
   }, [parseData]);
 
-  const topResult = useMemo(() => rankedResults[0], [rankedResults]);
-
   async function handleSearchSubmit(payload: ParseCreateRequest): Promise<void> {
     setIsSubmittingSearch(true);
     setSearchError(null);
@@ -64,7 +77,12 @@ export function PipelinePage() {
       const parse = await createParse(payload);
       const enrich = await runEnrich({ parse_result_id: parse.id });
       setRankedResults((previous) => rankResults([enrich, ...previous]));
-      await refetch();
+      // Reset to page 1 so the new record appears at the top.
+      if (offset === 0) {
+        await refetch();
+      } else {
+        setOffset(0);
+      }
     } catch (submitError) {
       setSearchError(submitError instanceof Error ? submitError.message : "Enrichment request failed.");
     } finally {
@@ -73,32 +91,32 @@ export function PipelinePage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-white px-4 py-10 sm:px-6 lg:px-8">
+    <main className="page-shell px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
-        <header className="mb-8">
+        <header className="mb-8 reveal-sequence">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+            <p className="kicker">
               Address Pipeline
             </p>
             <div className="flex items-center gap-3">
-              <span className="text-sm text-slate-600">
+              <span className="text-sm text-[var(--text-secondary)]">
                 Signed in as {user?.username ?? "unknown"}
               </span>
               <button
                 type="button"
                 onClick={logout}
-                className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                className="cta-secondary px-3 py-1.5 text-xs"
               >
                 Logout
               </button>
             </div>
           </div>
-          <h1 className="mt-2 text-3xl font-bold text-slate-900 sm:text-4xl">
+          <h1 className="headline mt-2 text-4xl font-bold sm:text-5xl">
             Inputs Feed
           </h1>
-          <p className="mt-3 max-w-3xl text-base text-slate-600">
-            Day 12 live integration: this list is loaded from the backend via
-            GET /inputs using a typed API client and React Query.
+          <p className="subcopy mt-3 max-w-3xl text-base">
+            Submit an address to run the full flow: libpostal parse, LLM gap fill,
+            search fallback, and geocode. Then review past submissions below.
           </p>
         </header>
 
@@ -109,36 +127,41 @@ export function PipelinePage() {
         errorMessage={searchError}
       />
     ) : (
-      <section className="mb-8 rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-amber-900">Read-only role</h2>
-        <p className="mt-1 text-sm text-amber-800">
+      <section className="mb-8 panel p-5 sm:p-6">
+        <h2 className="headline text-2xl font-bold text-amber-900">Read-only role</h2>
+        <p className="mt-1 text-sm text-amber-900/85">
           Your current role is <span className="font-semibold">{user?.role ?? "ops"}</span>. Creating parses and running enrichments is restricted to admins.
         </p>
       </section>
     )}
 
-    <section className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="mb-8 panel p-5 reveal-sequence sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-900">Ranked Enrichment Results</h2>
-        <span className="text-sm text-slate-500">Sorted by confidence, then completeness.</span>
+        <h2 className="headline text-2xl font-bold">Ranked Enrichment Results</h2>
+        <span className="neon-pill">CONFIDENCE FIRST</span>
       </div>
 
       {rankedResults.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-600">No enrichment runs yet in this session.</p>
+        <div className="mt-4 rounded-lg border border-dashed border-[rgba(13,44,114,0.2)] py-8 text-center">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">No results yet.</p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            {isAdmin ? "Submit an address above to get started." : "Ask an admin to run an enrichment."}
+          </p>
+        </div>
       ) : (
         <ul className="mt-4 space-y-3">
-          {rankedResults.map((result) => (
-            <li key={`${result.enrichment_result_id}-${result.rank}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          {rankedResults.map((result, index) => (
+            <li key={`${result.enrichment_result_id}-${result.rank}`} className="rounded-lg border border-[rgba(13,44,114,0.14)] bg-white/65 p-3" style={{ animationDelay: `${index * 70}ms` }}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Rank #{result.rank}</p>
-                  <p className="text-xs text-slate-600">
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">Rank #{result.rank}</p>
+                  <p className="text-xs text-[var(--text-secondary)]">
                     Confidence: {result.confidence_label ?? "unknown"} | Complete: {result.is_complete ? "yes" : "no"}
                   </p>
                 </div>
                 <Link
                   to={`/parse/${result.parse_result_id}`}
-                  className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                  className="cta-primary px-3 py-2 text-xs"
                 >
                   Open detail
                 </Link>
@@ -148,20 +171,29 @@ export function PipelinePage() {
         </ul>
       )}
 
-      {topResult ? (
-        <p className="mt-3 text-xs text-slate-500">
-          Top result parse id: {topResult.parse_result_id}
-        </p>
-      ) : null}
     </section>
 
         {isLoading ? (
-          <section className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">
-            <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
-            Loading inputs...
+          <section aria-label="Loading inputs" className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="panel animate-pulse p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="h-5 w-3/5 rounded bg-slate-200" />
+                  <div className="h-5 w-16 rounded-full bg-slate-200" />
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {Array.from({ length: 4 }).map((_, j) => (
+                    <div key={j}>
+                      <div className="h-3 w-20 rounded bg-slate-200" />
+                      <div className="mt-1 h-4 w-8 rounded bg-slate-200" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </section>
         ) : isError ? (
-          <section className="rounded-xl border border-rose-200 bg-rose-50 p-8 text-center text-rose-800 shadow-sm">
+          <section className="panel border-rose-200 bg-rose-50/85 p-8 text-center text-rose-800">
             <p className="font-semibold">Could not load inputs.</p>
             <p className="mt-2 text-sm">{error instanceof Error ? error.message : "Unknown error"}</p>
             <button
@@ -173,46 +205,50 @@ export function PipelinePage() {
             </button>
           </section>
         ) : items.length === 0 ? (
-          <section className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-600">
-            No parse input records found yet.
+          <section className="panel border-dashed border-[rgba(13,44,114,0.24)] p-10 text-center">
+            <p className="text-sm font-semibold text-[var(--text-primary)]">No addresses submitted yet.</p>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              {isAdmin ? "Use the enrichment form above to process your first address." : "No records have been submitted yet."}
+            </p>
           </section>
         ) : (
-          <section className="space-y-3">
-            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+          <section className="space-y-3 reveal-sequence">
+            <div className="panel flex items-center justify-between rounded-lg px-4 py-3 text-sm text-[var(--text-secondary)]">
               <span>
                 Showing {items.length} of {data?.total ?? items.length} records
               </span>
-              {isFetching ? <span className="text-slate-500">Refreshing...</span> : null}
+              {isFetching ? <span className="text-[var(--text-secondary)]">Refreshing...</span> : null}
             </div>
 
-            {items.map((item) => (
+            {items.map((item, index) => (
               <article
                 key={item.id}
-                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                className="panel p-4"
+                style={{ animationDelay: `${index * 55}ms` }}
               >
                 <header className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold text-slate-900">{item.raw_address}</h2>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                  <h2 className="min-w-0 break-words headline text-2xl font-bold">{item.raw_address}</h2>
+                  <span className="neon-pill">
                     {item.input_source}
                   </span>
                 </header>
 
                 <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                   <div>
-                    <dt className="text-slate-500">Country Hint</dt>
-                    <dd className="font-medium text-slate-800">{item.country_hint ?? "N/A"}</dd>
+                    <dt className="kicker">Country Hint</dt>
+                    <dd className="font-semibold text-[var(--text-primary)]">{item.country_hint ?? "N/A"}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">Parses</dt>
-                    <dd className="font-medium text-slate-800">{item.parse_result_count}</dd>
+                    <dt className="kicker">Parses</dt>
+                    <dd className="font-semibold text-[var(--text-primary)]">{item.parse_result_count}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">Enrichments</dt>
-                    <dd className="font-medium text-slate-800">{item.enrichment_result_count}</dd>
+                    <dt className="kicker">Enrichments</dt>
+                    <dd className="font-semibold text-[var(--text-primary)]">{item.enrichment_result_count}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">Geocodes</dt>
-                    <dd className="font-medium text-slate-800">{item.geocode_result_count}</dd>
+                    <dt className="kicker">Geocodes</dt>
+                    <dd className="font-semibold text-[var(--text-primary)]">{item.geocode_result_count}</dd>
                   </div>
                 </dl>
 
@@ -220,17 +256,29 @@ export function PipelinePage() {
                   {latestParseByInputId.has(item.id) ? (
                     <Link
                       to={`/parse/${latestParseByInputId.get(item.id)}`}
-                      className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                      className="cta-primary px-3 py-2 text-xs"
                     >
                       Open latest parse
                     </Link>
                   ) : (
-                    <span className="text-xs text-slate-500">No parse detail available yet</span>
+                    <span className="text-xs text-[var(--text-secondary)]">No parse detail available yet</span>
                   )}
                 </div>
 
               </article>
             ))}
+            {(data?.total ?? 0) > items.length && (
+              <div className="flex justify-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => setOffset((o) => o + LIST_LIMIT)}
+                  disabled={isFetching}
+                  className="cta-secondary px-5 py-2 text-sm disabled:opacity-50"
+                >
+                  {isFetching ? "Loading…" : `Load more (${(data?.total ?? 0) - items.length} remaining)`}
+                </button>
+              </div>
+            )}
           </section>
         )}
       </div>

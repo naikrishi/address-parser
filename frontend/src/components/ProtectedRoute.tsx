@@ -11,8 +11,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
 	if (isLoading) {
 		return (
-			<main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-white px-4 py-10 sm:px-6 lg:px-8">
-				<div className="mx-auto max-w-xl rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">
+			<main className="page-shell px-4 sm:px-6 lg:px-8">
+				<div className="mx-auto max-w-xl panel p-8 text-center text-[var(--text-secondary)]">
 					<div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
 					Checking session...
 				</div>

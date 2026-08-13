@@ -15,7 +15,15 @@ def get_database_url() -> str:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        # Look in the backend dir first, then the repo root (for local dev where CWD is backend/).
+        env_file=(".env", "../.env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # Runtime environment
+    app_env: Literal["development", "production"] = Field(default="development", alias="APP_ENV")
 
     # Database
     database_url: str = Field(

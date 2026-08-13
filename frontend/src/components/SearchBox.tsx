@@ -17,7 +17,7 @@ export function SearchBox({ onSubmit, isSubmitting, errorMessage }: SearchBoxPro
 		event.preventDefault();
 		const trimmed = rawAddress.trim();
 		if (!trimmed) {
-			setValidationError("Enter a raw address before running enrichment.");
+			setValidationError("Enter an address before you run this.");
 			return;
 		}
 		setValidationError(null);
@@ -30,45 +30,43 @@ export function SearchBox({ onSubmit, isSubmitting, errorMessage }: SearchBoxPro
 	}
 
 	return (
-		<section className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-			<h2 className="text-lg font-semibold text-slate-900">Run Enrichment</h2>
-			<p className="mt-1 text-sm text-slate-600">
-				Paste a raw address, create a parse result, and run the Day 10 enrichment pipeline.
-			</p>
+		<section className="mb-8 panel p-5 reveal-sequence sm:p-6">
+			<h2 className="headline text-2xl font-bold">Run Enrichment</h2>
+			<p className="subcopy mt-1 text-sm">Paste an address to parse and enrich it.</p>
 
 			<form className="mt-4 grid gap-3" onSubmit={(event) => void handleSubmit(event)}>
-				<label className="grid gap-1">
-					<span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Raw address</span>
+				<label className="grid gap-1.5">
+					<span className="kicker">Raw Address</span>
 					<input
 						type="text"
 						value={rawAddress}
 						onChange={(event) => setRawAddress(event.target.value)}
 						placeholder="3400 W Plano Pkwy, Plano, TX 75075, USA"
-						className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-500"
+						className="field px-3 py-2.5 text-sm outline-none ring-0 placeholder:text-slate-400"
 						disabled={isSubmitting}
 					/>
 				</label>
 
 				<div className="grid gap-3 sm:grid-cols-2">
-					<label className="grid gap-1">
-						<span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Input source</span>
+					<label className="grid gap-1.5">
+						<span className="kicker">Input Source</span>
 						<input
 							type="text"
 							value={inputSource}
 							onChange={(event) => setInputSource(event.target.value)}
-							className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-500"
+							className="field px-3 py-2.5 text-sm outline-none"
 							disabled={isSubmitting}
 						/>
 					</label>
 
-					<label className="grid gap-1">
-						<span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Country hint</span>
+					<label className="grid gap-1.5">
+						<span className="kicker">Country Hint</span>
 						<input
 							type="text"
 							value={countryHint}
 							onChange={(event) => setCountryHint(event.target.value)}
 							placeholder="US"
-							className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-500"
+							className="field px-3 py-2.5 text-sm outline-none"
 							disabled={isSubmitting}
 						/>
 					</label>
@@ -78,7 +76,7 @@ export function SearchBox({ onSubmit, isSubmitting, errorMessage }: SearchBoxPro
 					<button
 						type="submit"
 						disabled={isSubmitting}
-						className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+						className="cta-primary px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-55"
 					>
 						{isSubmitting ? "Running..." : "Run enrich"}
 					</button>

@@ -9,6 +9,19 @@ import type {
 	PipelineStep,
 } from "../types";
 
+const CONFIDENCE_COLOR: Record<string, string> = {
+	high: "bg-emerald-100 text-emerald-800",
+	medium: "bg-amber-100 text-amber-800",
+	low: "bg-rose-100 text-rose-800",
+};
+
+function toConfidenceLabel(score: number | null): "high" | "medium" | "low" | null {
+	if (score === null) return null;
+	if (score >= 0.7) return "high";
+	if (score >= 0.4) return "medium";
+	return "low";
+}
+
 function toBusinessList(geocode: GeocodeResultResponse | undefined): GeocodePayloadBusiness[] {
 	if (!geocode) {
 		return [];
@@ -88,10 +101,10 @@ export function DetailPage() {
 
 	if (!parseId) {
 		return (
-			<main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-white px-4 py-10 sm:px-6 lg:px-8">
-				<div className="mx-auto max-w-4xl rounded-xl border border-rose-200 bg-rose-50 p-8 text-rose-800">
+			<main className="page-shell px-4 sm:px-6 lg:px-8">
+				<div className="mx-auto max-w-4xl panel border-rose-200 bg-rose-50/85 p-8 text-rose-800">
 					<p className="font-semibold">Missing parse id in route.</p>
-					<Link to="/" className="mt-4 inline-block text-sm font-semibold text-slate-900 underline">
+					<Link to="/" className="mt-4 inline-block text-sm font-semibold text-[var(--text-primary)] underline">
 						Back to pipeline
 					</Link>
 				</div>
@@ -101,10 +114,21 @@ export function DetailPage() {
 
 	if (isLoading) {
 		return (
-			<main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-white px-4 py-10 sm:px-6 lg:px-8">
-				<div className="mx-auto max-w-4xl rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">
-					<div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
-					Loading parse detail...
+			<main className="page-shell px-4 sm:px-6 lg:px-8">
+				<div className="mx-auto max-w-5xl space-y-4">
+					{Array.from({ length: 4 }).map((_, i) => (
+						<div key={i} className="panel animate-pulse p-5">
+							<div className="h-5 w-40 rounded bg-slate-200" />
+							<div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+								{Array.from({ length: 4 }).map((_, j) => (
+									<div key={j}>
+										<div className="h-3 w-20 rounded bg-slate-200" />
+										<div className="mt-1 h-4 w-24 rounded bg-slate-200" />
+									</div>
+								))}
+							</div>
+						</div>
+					))}
 				</div>
 			</main>
 		);
@@ -121,8 +145,8 @@ export function DetailPage() {
 						? error.message
 						: "Unknown error";
 		return (
-			<main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-white px-4 py-10 sm:px-6 lg:px-8">
-				<div className="mx-auto max-w-4xl rounded-xl border border-rose-200 bg-rose-50 p-8 text-center text-rose-800 shadow-sm">
+			<main className="page-shell px-4 sm:px-6 lg:px-8">
+				<div className="mx-auto max-w-4xl panel border-rose-200 bg-rose-50/85 p-8 text-center text-rose-800">
 					<p className="font-semibold">Could not load parse detail.</p>
 					<p className="mt-2 text-sm">{message}</p>
 					<button
@@ -143,52 +167,101 @@ export function DetailPage() {
 	const steps = buildSteps(latestEnrichment, latestGeocode);
 
 	return (
-		<main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-white px-4 py-10 sm:px-6 lg:px-8">
+		<main className="page-shell px-4 sm:px-6 lg:px-8">
 			<div className="mx-auto max-w-5xl">
-				<header className="mb-8">
-					<p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Address Pipeline</p>
-					<h1 className="mt-2 text-3xl font-bold text-slate-900 sm:text-4xl">Detail View</h1>
-					<p className="mt-3 text-base text-slate-600">
-						Raw input, parse output, enrichment, search step, geocode, and nearby businesses.
+				<header className="mb-8 reveal-sequence">
+					<p className="kicker">Address Pipeline</p>
+					<h1 className="headline mt-2 text-4xl font-bold sm:text-5xl">Detail View</h1>
+					<p className="subcopy mt-3 text-base">
+						See the input, parsed fields, enrichment result, geocode, and nearby businesses.
 					</p>
 					<div className="mt-4 flex items-center gap-4 text-sm">
-						<Link to="/" className="font-semibold text-slate-800 underline">
+						<Link to="/" className="font-semibold text-[var(--text-primary)] underline">
 							Back to pipeline
 						</Link>
-						{isFetching ? <span className="text-slate-500">Refreshing...</span> : null}
+						{isFetching ? <span className="text-[var(--text-secondary)]">Refreshing...</span> : null}
 					</div>
 				</header>
 
-				<section className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-					<h2 className="text-lg font-semibold text-slate-900">Raw Input</h2>
-					<p className="mt-2 text-slate-800">{data.raw_input.raw_address}</p>
+				<section className="mb-6 panel p-5 reveal-sequence sm:p-6">
+					<h2 className="headline text-2xl font-bold">Raw Input</h2>
+					<p className="mt-2 break-words text-[var(--text-primary)]">{data.raw_input.raw_address}</p>
 					<dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
 						<div>
-							<dt className="text-slate-500">Input Source</dt>
-							<dd className="font-medium text-slate-800">{data.raw_input.input_source}</dd>
+							<dt className="kicker">Input Source</dt>
+							<dd className="font-semibold text-[var(--text-primary)]">{data.raw_input.input_source}</dd>
 						</div>
 						<div>
-							<dt className="text-slate-500">Country Hint</dt>
-							<dd className="font-medium text-slate-800">{data.raw_input.country_hint ?? "N/A"}</dd>
+							<dt className="kicker">Country Hint</dt>
+							<dd className="font-semibold text-[var(--text-primary)]">{data.raw_input.country_hint ?? "N/A"}</dd>
 						</div>
 						<div>
-							<dt className="text-slate-500">Parser</dt>
-							<dd className="font-medium text-slate-800">{data.parser_name}</dd>
+							<dt className="kicker">Parser</dt>
+							<dd className="font-semibold text-[var(--text-primary)]">{data.parser_name}</dd>
 						</div>
 						<div>
-							<dt className="text-slate-500">Parse Confidence</dt>
-							<dd className="font-medium text-slate-800">{data.confidence_score}</dd>
+							<dt className="kicker">Parse Confidence</dt>
+						<dd className="font-semibold text-[var(--text-primary)]">{(data.confidence_score * 100).toFixed(0)}%</dd>
 						</div>
 					</dl>
 				</section>
 
-				<section className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-					<h2 className="text-lg font-semibold text-slate-900">Parsed Components</h2>
+				{latestEnrichment && (
+					<section className="mb-6 panel p-5 reveal-sequence sm:p-6">
+						<div className="flex flex-wrap items-center justify-between gap-3">
+							<h2 className="headline text-2xl font-bold">Enrichment Summary</h2>
+							{(() => {
+								const label = toConfidenceLabel(latestEnrichment.confidence_score);
+								return label ? (
+									<span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${CONFIDENCE_COLOR[label]}`}>
+										{label} confidence
+									</span>
+								) : null;
+							})()}
+						</div>
+						<dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+							<div>
+								<dt className="kicker">Provider</dt>
+								<dd className="font-semibold text-[var(--text-primary)]">{latestEnrichment.provider_name}</dd>
+							</div>
+							<div>
+								<dt className="kicker">Status</dt>
+								<dd className="font-semibold capitalize text-[var(--text-primary)]">{latestEnrichment.status}</dd>
+							</div>
+							<div>
+								<dt className="kicker">Complete</dt>
+								<dd className="font-semibold text-[var(--text-primary)]">{latestEnrichment.is_complete ? "Yes" : "No"}</dd>
+							</div>
+						</dl>
+						{latestEnrichment.error_message ? (
+							<p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700">{latestEnrichment.error_message}</p>
+						) : null}
+					</section>
+				)}
+
+				{latestGeocode && (latestGeocode.latitude !== null || latestGeocode.longitude !== null) && (
+					<section className="mb-6 panel p-5 reveal-sequence sm:p-6">
+						<h2 className="headline text-2xl font-bold">Geocode Coordinates</h2>
+						<dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+							<div>
+								<dt className="kicker">Latitude</dt>
+								<dd className="font-semibold tabular-nums text-[var(--text-primary)]">{latestGeocode.latitude ?? "N/A"}</dd>
+							</div>
+							<div>
+								<dt className="kicker">Longitude</dt>
+								<dd className="font-semibold tabular-nums text-[var(--text-primary)]">{latestGeocode.longitude ?? "N/A"}</dd>
+							</div>
+						</dl>
+					</section>
+				)}
+
+				<section className="mb-6 panel p-5 reveal-sequence sm:p-6">
+					<h2 className="headline text-2xl font-bold">Parsed Components</h2>
 					<dl className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
 						{Object.entries(data.parsed_components).map(([key, value]) => (
-							<div key={key} className="rounded-md bg-slate-50 px-3 py-2">
-								<dt className="text-xs font-medium uppercase text-slate-500">{key}</dt>
-								<dd className="text-sm font-medium text-slate-800">{value ?? "N/A"}</dd>
+							<div key={key} className="rounded-lg border border-[rgba(13,44,114,0.14)] bg-white/65 px-3 py-2">
+								<dt className="kicker">{key}</dt>
+								<dd className="text-sm font-semibold text-[var(--text-primary)]">{value ?? "N/A"}</dd>
 							</div>
 						))}
 					</dl>
@@ -200,18 +273,21 @@ export function DetailPage() {
 					))}
 				</section>
 
-				<section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-					<h2 className="text-lg font-semibold text-slate-900">Nearby Businesses</h2>
+				<section className="panel p-5 reveal-sequence sm:p-6">
+					<h2 className="headline text-2xl font-bold">Nearby Businesses</h2>
 					{nearbyBusinesses.length === 0 ? (
-						<p className="mt-2 text-sm text-slate-600">No nearby businesses were returned.</p>
+						<div className="mt-4 rounded-lg border border-dashed border-[rgba(13,44,114,0.2)] py-6 text-center">
+							<p className="text-sm text-[var(--text-secondary)]">No nearby businesses were returned by the geocoder.</p>
+							<p className="mt-1 text-xs text-[var(--text-secondary)]">This can happen in test or stub mode.</p>
+						</div>
 					) : (
 						<ul className="mt-4 space-y-3">
 							{nearbyBusinesses.map((biz, index) => (
-								<li key={`${biz.name ?? "business"}-${index}`} className="rounded-md border border-slate-200 bg-slate-50 p-3">
-									<p className="font-semibold text-slate-900">{biz.name ?? `Business ${index + 1}`}</p>
-									<p className="text-sm text-slate-700">{biz.address ?? "Address unavailable"}</p>
+								<li key={`${biz.name ?? "business"}-${index}`} className="rounded-lg border border-[rgba(13,44,114,0.14)] bg-white/65 p-3">
+									<p className="font-semibold text-[var(--text-primary)]">{biz.name ?? `Business ${index + 1}`}</p>
+									<p className="text-sm text-[var(--text-secondary)]">{biz.address ?? "Address unavailable"}</p>
 									{typeof biz.rating === "number" ? (
-										<p className="text-xs text-slate-500">Rating: {biz.rating}</p>
+										<p className="text-xs text-[var(--text-secondary)]">Rating: {biz.rating}</p>
 									) : null}
 								</li>
 							))}

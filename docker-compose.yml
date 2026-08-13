@@ -46,6 +46,14 @@ services:
       SEED_ADMIN_USERNAME: admin
       SEED_ADMIN_EMAIL: admin@example.com
       SEED_ADMIN_PASSWORD: admin12345
+        LLM_LOCAL_PROVIDER: ollama
+        LLM_LOCAL_BASE_URL: ""
+        LLM_LOCAL_MODEL: ""
+        LLM_LOCAL_TIMEOUT_SECONDS: 60
+        GEOCODER_PROVIDER: none
+        GEOCODER_BASE_URL: ""
+        GEOCODER_TIMEOUT_SECONDS: 15
+        USE_LOCAL_MODELS_ONLY: "false"
     ports:
       - "8000:8000"
     healthcheck:

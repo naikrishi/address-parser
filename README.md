@@ -143,6 +143,25 @@ Common variables:
 - `EMBEDDINGS_MODEL`
 - `EMBEDDINGS_DIMENSION`
 
+### Local-first pipeline configuration
+
+For local-only runtime, set these in `.env` and leave remote keys empty:
+
+```env
+USE_LOCAL_MODELS_ONLY=true
+LLM_LOCAL_PROVIDER=ollama
+LLM_LOCAL_BASE_URL=http://127.0.0.1:11434
+LLM_LOCAL_MODEL=qwen2.5:7b
+
+GEOCODER_PROVIDER=nominatim
+GEOCODER_BASE_URL=http://127.0.0.1:8080
+```
+
+Notes:
+
+- If `USE_LOCAL_MODELS_ONLY=true` and a local LLM is not configured, enrichment steps return an error status instead of using remote providers.
+- If local geocoder is not configured in local-only mode, geocode step falls back to `stub` provider.
+
 ## Testing
 
 ### Backend

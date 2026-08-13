@@ -10,3 +10,5 @@ playwright-report/
 test-results/
 .auth/
 frontend/node_modules/
+AP_Plan.md
+PROGRESS.md

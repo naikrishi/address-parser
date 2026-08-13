@@ -166,7 +166,7 @@ cd frontend
 npm run test:e2e
 ```
 
-## What This Demonstrates (For Hiring Managers)
+## What This Demonstrates
 
 This repository is a practical example of full-stack engineering across product, platform, and reliability concerns:
 

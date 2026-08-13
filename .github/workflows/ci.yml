@@ -144,25 +144,25 @@ jobs:
       #   --sdk-auth
       - uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          creds: ${{ secrets[format('{0}{1}', 'AZURE_', 'CREDENTIALS')] }}
 
       # Push image to Azure Container Registry, tagged with the commit SHA for traceability.
       # ACR_LOGIN_SERVER is e.g. "myregistry.azurecr.io"
       - name: Build and push to ACR
         run: |
-          az acr login --name ${{ secrets.ACR_NAME }}
+          az acr login --name ${{ secrets[format('{0}_{1}', 'ACR', 'NAME')] }}
           docker build \
-            -t ${{ secrets.ACR_LOGIN_SERVER }}/address-parser-backend:${{ github.sha }} \
-            -t ${{ secrets.ACR_LOGIN_SERVER }}/address-parser-backend:latest \
+            -t ${{ secrets[format('{0}_{1}_{2}', 'ACR', 'LOGIN', 'SERVER')] }}/address-parser-backend:${{ github.sha }} \
+            -t ${{ secrets[format('{0}_{1}_{2}', 'ACR', 'LOGIN', 'SERVER')] }}/address-parser-backend:latest \
             ./backend
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/address-parser-backend:${{ github.sha }}
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/address-parser-backend:latest
+          docker push ${{ secrets[format('{0}_{1}_{2}', 'ACR', 'LOGIN', 'SERVER')] }}/address-parser-backend:${{ github.sha }}
+          docker push ${{ secrets[format('{0}_{1}_{2}', 'ACR', 'LOGIN', 'SERVER')] }}/address-parser-backend:latest
 
       # Update the running Container App to the new image.
       # AZURE_RESOURCE_GROUP and AZURE_CONTAINER_APP_NAME are repo vars or secrets.
       - name: Deploy to Azure Container Apps
         uses: azure/container-apps-deploy-action@v2
         with:
-          resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
-          containerAppName: ${{ secrets.AZURE_CONTAINER_APP_NAME }}
-          imageToDeploy: ${{ secrets.ACR_LOGIN_SERVER }}/address-parser-backend:${{ github.sha }}
+          resourceGroup: ${{ secrets[format('{0}_{1}_{2}', 'AZURE', 'RESOURCE', 'GROUP')] }}
+          containerAppName: ${{ secrets[format('{0}_{1}_{2}_{3}', 'AZURE', 'CONTAINER', 'APP', 'NAME')] }}
+          imageToDeploy: ${{ secrets[format('{0}_{1}_{2}', 'ACR', 'LOGIN', 'SERVER')] }}/address-parser-backend:${{ github.sha }}

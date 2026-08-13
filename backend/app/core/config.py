@@ -74,6 +74,24 @@ class Settings(BaseSettings):
     llm_timeout_seconds: int = Field(default=60, alias="LLM_TIMEOUT_SECONDS")
     llm_max_retries: int = Field(default=3, alias="LLM_MAX_RETRIES")
 
+    # Local LLM provider settings (used by upcoming local-first enrichment path)
+    llm_local_provider: Literal["ollama", "lm_studio"] = Field(
+        default="ollama", alias="LLM_LOCAL_PROVIDER"
+    )
+    llm_local_base_url: str = Field(default="", alias="LLM_LOCAL_BASE_URL")
+    llm_local_model: str = Field(default="", alias="LLM_LOCAL_MODEL")
+    llm_local_timeout_seconds: int = Field(default=60, alias="LLM_LOCAL_TIMEOUT_SECONDS")
+
+    # Local geocoder settings (used by upcoming local-first geocode path)
+    geocoder_provider: Literal["nominatim", "none"] = Field(
+        default="none", alias="GEOCODER_PROVIDER"
+    )
+    geocoder_base_url: str = Field(default="", alias="GEOCODER_BASE_URL")
+    geocoder_timeout_seconds: int = Field(default=15, alias="GEOCODER_TIMEOUT_SECONDS")
+
+    # If true, upcoming provider dispatch will skip remote providers and use local-only paths.
+    use_local_models_only: bool = Field(default=False, alias="USE_LOCAL_MODELS_ONLY")
+
     # Serper (placeholder until key is issued)
     serper_api_key: str = Field(default="", alias="SERPER_API_KEY")
     serper_api_base_url: str = Field(
@@ -106,6 +124,8 @@ class Settings(BaseSettings):
         "auth_bcrypt_rounds",
         "auth_rate_limit_per_minute",
         "auth_rate_limit_window_seconds",
+        "llm_local_timeout_seconds",
+        "geocoder_timeout_seconds",
     )
     @classmethod
     def validate_positive_ints(cls, v: int) -> int:

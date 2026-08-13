@@ -97,7 +97,7 @@ def test_post_parse_creates_record() -> None:
     assert response.status_code == 201
     body = response.json()
     assert body["id"]
-    assert body["parser_name"] == "stub"
+    assert body["parser_name"] in {"usaddress", "heuristic"}
     assert body["raw_input"]["raw_address"] == payload["raw_address"]
 
 

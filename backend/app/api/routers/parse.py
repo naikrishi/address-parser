@@ -23,41 +23,9 @@ from app.schemas.parse import (
     ParseResultResponse,
 )
 from app.services.audit import record_audit_event
+from app.services.parse import parse_address_with_provider
 
 router = APIRouter(tags=["parse"])
-
-REQUIRED_COMPONENT_KEYS = ["street_line", "city", "state", "postal_code"]
-
-
-def _build_parse_stub(raw_address: str, country_hint: str | None) -> tuple[dict[str, str | None], bool, float]:
-    parts = [segment.strip() for segment in raw_address.split(",") if segment.strip()]
-
-    street_line = parts[0] if len(parts) > 0 else None
-    city = parts[1] if len(parts) > 1 else None
-
-    state = None
-    postal_code = None
-    if len(parts) > 2:
-        state_zip_tokens = parts[2].split()
-        if state_zip_tokens:
-            state = state_zip_tokens[0]
-        if len(state_zip_tokens) > 1:
-            postal_code = state_zip_tokens[-1]
-
-    country = country_hint or (parts[3] if len(parts) > 3 else None)
-
-    parsed_components: dict[str, str | None] = {
-        "street_line": street_line,
-        "city": city,
-        "state": state,
-        "postal_code": postal_code,
-        "country": country,
-    }
-
-    complete = all(parsed_components.get(key) for key in REQUIRED_COMPONENT_KEYS)
-    confidence_score = 0.75 if complete else 0.4
-    return parsed_components, complete, confidence_score
-
 
 def _build_parse_summary_maps(db: Session, parse_ids: list[UUID]) -> dict[UUID, dict[str, int | str | None]]:
     if not parse_ids:
@@ -153,7 +121,7 @@ def create_parse(
     current_user: User = Depends(get_admin_user),
 ) -> ParseResult:
     _ = current_user
-    parsed_components, is_complete, confidence_score = _build_parse_stub(
+    parsed_components, is_complete, confidence_score, parser_name = parse_address_with_provider(
         raw_address=payload.raw_address,
         country_hint=payload.country_hint,
     )
@@ -168,7 +136,7 @@ def create_parse(
 
     parse_result = ParseResult(
         raw_input_id=raw_input.id,
-        parser_name="stub",
+        parser_name=parser_name,
         parsed_components=parsed_components,
         is_complete=is_complete,
         confidence_score=confidence_score,

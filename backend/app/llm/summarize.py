@@ -1,7 +1,8 @@
 """LLM-based enrichment summary and confidence scoring.
 
-When the OpenAI key/endpoint is not configured, both functions return stubs so the
-pipeline can still be exercised locally without external dependencies.
+Uses local LLM configuration first when available. When neither local nor remote
+providers are configured, both functions fall back to deterministic rule-based
+outputs so the pipeline can run without external dependencies.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.config import get_settings
+from app.llm.local_llm import call_local_llm, is_local_llm_configured
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,8 @@ Steps that ran: {steps_ran}
 
 def _llm_available() -> bool:
     s = get_settings()
+    if is_local_llm_configured(s.llm_local_base_url, s.llm_local_model):
+        return True
     return bool(s.openai_api_key and s.openai_api_base_url)
 
 
@@ -62,6 +66,21 @@ def _llm_available() -> bool:
 def _call_llm(prompt: str, max_tokens: int = 256) -> tuple[str, int, int]:
     """Return (response_text, prompt_tokens, completion_tokens)."""
     settings = get_settings()
+
+    if is_local_llm_configured(settings.llm_local_base_url, settings.llm_local_model):
+        parsed_json, pt, ct, _ = call_local_llm(
+            provider=settings.llm_local_provider,
+            base_url=settings.llm_local_base_url,
+            model=settings.llm_local_model,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            timeout_seconds=settings.llm_local_timeout_seconds,
+        )
+        return json.dumps(parsed_json), pt, ct
+
+    if settings.use_local_models_only:
+        raise RuntimeError("Local-only mode enabled but local LLM is not configured")
+
     with httpx.Client(timeout=settings.llm_timeout_seconds) as client:
         resp = client.post(
             f"{settings.openai_api_base_url}/chat/completions",
